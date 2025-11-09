@@ -2,6 +2,28 @@
 
 A production-grade REST API for inventory and work order management built with ASP.NET Core 8. This enterprise-level solution demonstrates modern architectural patterns and best practices for building scalable, maintainable APIs.
 
+## 🚀 Quick Start (Windows Users)
+
+**New to this project? Running on Windows?**
+
+See **[GETTING_STARTED_WINDOWS.md](GETTING_STARTED_WINDOWS.md)** for detailed setup instructions with:
+- ✅ Three setup options (Docker, .NET SDK, WSL)
+- ✅ Step-by-step instructions with screenshots
+- ✅ Troubleshooting guide
+- ✅ Testing instructions
+- ✅ Default credentials and sample data
+
+**Super Quick Start with Docker:**
+```powershell
+docker-compose up --build
+# Access UI at http://localhost:3000
+# Login: admin@inventory.com / Admin123!
+```
+
+Or simply double-click **`quick-start.bat`** to start with Docker!
+
+---
+
 ## 🎯 Overview
 
 This API provides comprehensive inventory tracking and work order management capabilities suitable for warehouses, maintenance departments, and supply chain operations. Built with clean architecture principles, it emphasizes separation of concerns, testability, and extensibility.

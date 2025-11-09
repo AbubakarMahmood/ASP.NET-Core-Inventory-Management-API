@@ -1,0 +1,154 @@
+@page "/products/create"
+@attribute [Authorize(Roles = "Admin,Manager")]
+@inject ProductService ProductService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Create Product - Inventory Management</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Create New Product</MudText>
+
+<MudPaper Elevation="2" Class="pa-4">
+    <EditForm Model="@_product" OnValidSubmit="CreateProductAsync">
+        <DataAnnotationsValidator />
+
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_product.SKU"
+                              Label="SKU"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              Disabled="@_isSubmitting" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_product.Name"
+                              Label="Product Name"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              Disabled="@_isSubmitting" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_product.Description"
+                              Label="Description"
+                              Variant="Variant.Outlined"
+                              Lines="3"
+                              Disabled="@_isSubmitting" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_product.Category"
+                              Label="Category"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              Disabled="@_isSubmitting" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_product.Location"
+                              Label="Warehouse Location"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              Disabled="@_isSubmitting" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudNumericField @bind-Value="_product.CurrentStock"
+                                 Label="Current Stock"
+                                 Variant="Variant.Outlined"
+                                 Min="0"
+                                 Disabled="@_isSubmitting" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudNumericField @bind-Value="_product.ReorderPoint"
+                                 Label="Reorder Point"
+                                 Variant="Variant.Outlined"
+                                 Min="0"
+                                 Disabled="@_isSubmitting" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudNumericField @bind-Value="_product.ReorderQuantity"
+                                 Label="Reorder Quantity"
+                                 Variant="Variant.Outlined"
+                                 Min="1"
+                                 Disabled="@_isSubmitting" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_product.UnitOfMeasure"
+                              Label="Unit of Measure"
+                              Variant="Variant.Outlined"
+                              Placeholder="EA, KG, L, etc."
+                              Required="true"
+                              Disabled="@_isSubmitting" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudNumericField @bind-Value="_product.UnitCost"
+                                 Label="Unit Cost ($)"
+                                 Variant="Variant.Outlined"
+                                 Min="0"
+                                 Format="N2"
+                                 Disabled="@_isSubmitting" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect @bind-Value="_product.CostingMethod"
+                           Label="Costing Method"
+                           Variant="Variant.Outlined"
+                           Disabled="@_isSubmitting">
+                    <MudSelectItem Value="CostingMethod.FIFO">FIFO (First In, First Out)</MudSelectItem>
+                    <MudSelectItem Value="CostingMethod.LIFO">LIFO (Last In, First Out)</MudSelectItem>
+                    <MudSelectItem Value="CostingMethod.Average">Average Cost</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+
+        <MudDivider Class="my-4" />
+
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Default" Href="/products" Disabled="@_isSubmitting">Cancel</MudButton>
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Disabled="@_isSubmitting">
+                @if (_isSubmitting)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Creating...</span>
+                }
+                else
+                {
+                    <span>Create Product</span>
+                }
+            </MudButton>
+        </MudStack>
+    </EditForm>
+</MudPaper>
+
+@code {
+    private CreateProductRequest _product = new()
+    {
+        CostingMethod = CostingMethod.Average,
+        UnitOfMeasure = "EA"
+    };
+    private bool _isSubmitting = false;
+
+    private async Task CreateProductAsync()
+    {
+        _isSubmitting = true;
+
+        try
+        {
+            var result = await ProductService.CreateProductAsync(_product);
+
+            if (result != null)
+            {
+                Snackbar.Add("Product created successfully!", Severity.Success);
+                Navigation.NavigateTo("/products");
+            }
+            else
+            {
+                Snackbar.Add("Failed to create product", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error creating product: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+}

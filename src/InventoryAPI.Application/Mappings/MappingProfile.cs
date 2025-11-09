@@ -18,7 +18,7 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.IsLowStock, opt => opt.MapFrom(src => src.IsLowStock()));
 
         CreateMap<CreateProductCommand, Product>();
-
+        
         // StockMovement mappings
         CreateMap<StockMovement, StockMovementDto>()
             .ForMember(dest => dest.ProductSKU, opt => opt.Ignore())
@@ -27,5 +27,6 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.WorkOrderNumber, opt => opt.Ignore());
 
         CreateMap<RecordStockMovementCommand, StockMovement>();
+        // Add more mappings as needed
     }
 }

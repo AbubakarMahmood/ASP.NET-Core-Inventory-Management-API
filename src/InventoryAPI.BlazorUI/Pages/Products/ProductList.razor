@@ -45,6 +45,23 @@
             </MudStack>
         </MudItem>
 
+        <!-- Active Filter Chips -->
+        @if (GetActiveFilterChips().Any())
+        {
+            <MudItem xs="12">
+                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                    <MudText Typo="Typo.caption" Class="mt-2 mr-2">Active Filters:</MudText>
+                    @foreach (var chip in GetActiveFilterChips())
+                    {
+                        <MudChip Size="Size.Small"
+                                 Color="Color.Primary"
+                                 OnClose="@(() => RemoveFilterChip(chip.Key))"
+                                 Text="@chip.Value" />
+                    }
+                </MudStack>
+            </MudItem>
+        }
+
         <!-- Basic Filters Row -->
         <MudItem xs="12" md="4">
             <MudTextField @bind-Value="_searchTerm"
@@ -278,6 +295,20 @@
     {
         await LoadFilterPresetsAsync();
         await LoadProductsAsync();
+
+        // Set up keyboard shortcuts
+        await JSRuntime.InvokeVoidAsync("eval", @"
+            document.addEventListener('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                    e.preventDefault();
+                    document.getElementById('savePresetBtn')?.click();
+                }
+                if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                    e.preventDefault();
+                    document.getElementById('clearFiltersBtn')?.click();
+                }
+            });
+        ");
     }
 
     private async Task LoadFilterPresetsAsync()
@@ -595,6 +626,83 @@
     {
         _currentPage = 1;
         await LoadProductsAsync();
+    }
+
+    private Dictionary<string, string> GetActiveFilterChips()
+    {
+        var chips = new Dictionary<string, string>();
+
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+            chips.Add("searchTerm", $"Search: {_searchTerm}");
+
+        if (!string.IsNullOrWhiteSpace(_selectedCategory))
+            chips.Add("category", $"Category: {_selectedCategory}");
+
+        if (_lowStockOnly)
+            chips.Add("lowStock", "Low Stock Only");
+
+        if (_unitCostMin.HasValue)
+            chips.Add("costMin", $"Min Cost: ${_unitCostMin.Value:N2}");
+
+        if (_unitCostMax.HasValue)
+            chips.Add("costMax", $"Max Cost: ${_unitCostMax.Value:N2}");
+
+        if (_currentStockMin.HasValue)
+            chips.Add("stockMin", $"Min Stock: {_currentStockMin.Value}");
+
+        if (_currentStockMax.HasValue)
+            chips.Add("stockMax", $"Max Stock: {_currentStockMax.Value}");
+
+        if (_reorderPointMin.HasValue)
+            chips.Add("reorderMin", $"Min Reorder: {_reorderPointMin.Value}");
+
+        if (_reorderPointMax.HasValue)
+            chips.Add("reorderMax", $"Max Reorder: {_reorderPointMax.Value}");
+
+        if (!string.IsNullOrEmpty(_sortColumn1))
+            chips.Add("sort", $"Sort: {_sortColumn1} ({_sortOrder1})");
+
+        return chips;
+    }
+
+    private async Task RemoveFilterChip(string key)
+    {
+        switch (key)
+        {
+            case "searchTerm":
+                _searchTerm = "";
+                break;
+            case "category":
+                _selectedCategory = "";
+                break;
+            case "lowStock":
+                _lowStockOnly = false;
+                break;
+            case "costMin":
+                _unitCostMin = null;
+                break;
+            case "costMax":
+                _unitCostMax = null;
+                break;
+            case "stockMin":
+                _currentStockMin = null;
+                break;
+            case "stockMax":
+                _currentStockMax = null;
+                break;
+            case "reorderMin":
+                _reorderPointMin = null;
+                break;
+            case "reorderMax":
+                _reorderPointMax = null;
+                break;
+            case "sort":
+                _sortColumn1 = "";
+                _sortColumn2 = "";
+                break;
+        }
+
+        await SearchAsync();
     }
 
     private async Task DeleteProductAsync(Guid id)

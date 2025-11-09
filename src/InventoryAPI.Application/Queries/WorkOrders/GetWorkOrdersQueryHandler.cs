@@ -63,9 +63,11 @@ public class GetWorkOrdersQueryHandler : IRequestHandler<GetWorkOrdersQuery, Pag
         // Get total count
         var totalCount = await query.CountAsync(cancellationToken);
 
-        // Apply pagination and ordering
+        // Multi-column sorting
+        query = ApplySorting(query, request.SortBy, request.SortOrder);
+
+        // Apply pagination
         var workOrders = await query
-            .OrderByDescending(w => w.CreatedAt)
             .Skip((request.PageNumber - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
@@ -103,5 +105,73 @@ public class GetWorkOrdersQueryHandler : IRequestHandler<GetWorkOrdersQuery, Pag
             request.PageNumber,
             request.PageSize
         );
+    }
+
+    private IQueryable<Domain.Entities.WorkOrder> ApplySorting(
+        IQueryable<Domain.Entities.WorkOrder> query,
+        string? sortBy,
+        string? sortOrder)
+    {
+        if (string.IsNullOrWhiteSpace(sortBy))
+        {
+            return query.OrderByDescending(w => w.CreatedAt); // Default sorting
+        }
+
+        var sortColumns = sortBy.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        var sortOrders = sortOrder?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+
+        IOrderedQueryable<Domain.Entities.WorkOrder>? orderedQuery = null;
+
+        for (int i = 0; i < sortColumns.Length; i++)
+        {
+            var column = sortColumns[i].Trim();
+            var order = i < sortOrders.Length ? sortOrders[i].Trim().ToLower() : "asc";
+            var isDescending = order == "desc";
+
+            if (orderedQuery == null)
+            {
+                orderedQuery = ApplyOrderBy(query, column, isDescending);
+            }
+            else
+            {
+                orderedQuery = ApplyThenBy(orderedQuery, column, isDescending);
+            }
+        }
+
+        return orderedQuery ?? query.OrderByDescending(w => w.CreatedAt);
+    }
+
+    private IOrderedQueryable<Domain.Entities.WorkOrder> ApplyOrderBy(
+        IQueryable<Domain.Entities.WorkOrder> query,
+        string column,
+        bool descending)
+    {
+        return column.ToLower() switch
+        {
+            "ordernumber" => descending ? query.OrderByDescending(w => w.OrderNumber) : query.OrderBy(w => w.OrderNumber),
+            "status" => descending ? query.OrderByDescending(w => w.Status) : query.OrderBy(w => w.Status),
+            "priority" => descending ? query.OrderByDescending(w => w.Priority) : query.OrderBy(w => w.Priority),
+            "createdat" => descending ? query.OrderByDescending(w => w.CreatedAt) : query.OrderBy(w => w.CreatedAt),
+            "requesteddate" => descending ? query.OrderByDescending(w => w.RequestedDate) : query.OrderBy(w => w.RequestedDate),
+            "completeddate" => descending ? query.OrderByDescending(w => w.CompletedDate) : query.OrderBy(w => w.CompletedDate),
+            _ => descending ? query.OrderByDescending(w => w.CreatedAt) : query.OrderBy(w => w.CreatedAt)
+        };
+    }
+
+    private IOrderedQueryable<Domain.Entities.WorkOrder> ApplyThenBy(
+        IOrderedQueryable<Domain.Entities.WorkOrder> query,
+        string column,
+        bool descending)
+    {
+        return column.ToLower() switch
+        {
+            "ordernumber" => descending ? query.ThenByDescending(w => w.OrderNumber) : query.ThenBy(w => w.OrderNumber),
+            "status" => descending ? query.ThenByDescending(w => w.Status) : query.ThenBy(w => w.Status),
+            "priority" => descending ? query.ThenByDescending(w => w.Priority) : query.ThenBy(w => w.Priority),
+            "createdat" => descending ? query.ThenByDescending(w => w.CreatedAt) : query.ThenBy(w => w.CreatedAt),
+            "requesteddate" => descending ? query.ThenByDescending(w => w.RequestedDate) : query.ThenBy(w => w.RequestedDate),
+            "completeddate" => descending ? query.ThenByDescending(w => w.CompletedDate) : query.ThenBy(w => w.CompletedDate),
+            _ => descending ? query.ThenByDescending(w => w.CreatedAt) : query.ThenBy(w => w.CreatedAt)
+        };
     }
 }

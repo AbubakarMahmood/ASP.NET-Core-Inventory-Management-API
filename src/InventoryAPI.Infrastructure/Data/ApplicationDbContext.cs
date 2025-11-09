@@ -20,6 +20,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
     public DbSet<WorkOrderItem> WorkOrderItems => Set<WorkOrderItem>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
+    public DbSet<FilterPreset> FilterPresets => Set<FilterPreset>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -20,6 +20,7 @@ public class UnitOfWork : IUnitOfWork
         WorkOrders = new Repository<WorkOrder>(_context);
         WorkOrderItems = new Repository<WorkOrderItem>(_context);
         StockMovements = new Repository<StockMovement>(_context);
+        FilterPresets = new Repository<FilterPreset>(_context);
     }
 
     public IRepository<User> Users { get; }
@@ -27,6 +28,7 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<WorkOrder> WorkOrders { get; }
     public IRepository<WorkOrderItem> WorkOrderItems { get; }
     public IRepository<StockMovement> StockMovements { get; }
+    public IRepository<FilterPreset> FilterPresets { get; }
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

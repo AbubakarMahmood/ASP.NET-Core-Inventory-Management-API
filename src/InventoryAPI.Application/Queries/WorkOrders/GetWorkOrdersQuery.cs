@@ -5,7 +5,7 @@ using MediatR;
 namespace InventoryAPI.Application.Queries.WorkOrders;
 
 /// <summary>
-/// Query to get work orders with filtering and pagination
+/// Query to get work orders with filtering, pagination, and multi-column sorting
 /// </summary>
 public class GetWorkOrdersQuery : IRequest<PaginatedResult<WorkOrderDto>>
 {
@@ -17,4 +17,9 @@ public class GetWorkOrdersQuery : IRequest<PaginatedResult<WorkOrderDto>>
     public Guid? RequestedById { get; set; }
     public DateTime? FromDate { get; set; }
     public DateTime? ToDate { get; set; }
+
+    // Multi-column sorting (comma-separated: "OrderNumber,Priority,CreatedAt")
+    public string? SortBy { get; set; }
+    // Sort order for each column (comma-separated: "asc,desc,desc")
+    public string? SortOrder { get; set; }
 }

@@ -38,5 +38,8 @@ public class MappingProfile : Profile
         // User mappings
         CreateMap<User, UserDto>()
             .ForMember(dest => dest.FullName, opt => opt.MapFrom(src => src.FullName));
+
+        // FilterPreset mappings
+        CreateMap<FilterPreset, FilterPresetDto>();
     }
 }

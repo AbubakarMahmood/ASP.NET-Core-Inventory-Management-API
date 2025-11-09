@@ -1,0 +1,140 @@
+@page "/reports/pending-orders"
+@attribute [Authorize(Roles = "Admin,Manager")]
+@inject WorkOrderService WorkOrderService
+@inject ISnackbar Snackbar
+
+<PageTitle>Pending Orders Report - Inventory Management</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Pending Work Orders Report</MudText>
+
+<MudAlert Severity="Severity.Info" Class="mb-4">
+    <MudText Typo="Typo.h6">Work Order Tracking Coming Soon!</MudText>
+    <MudText>This report will show all work orders that require action:</MudText>
+    <MudList Dense="true">
+        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
+            Submitted orders awaiting approval
+        </MudListItem>
+        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
+            Approved orders ready to start
+        </MudListItem>
+        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
+            In-progress orders nearing due date
+        </MudListItem>
+        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
+            Overdue work orders
+        </MudListItem>
+    </MudList>
+</MudAlert>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <MudPaper Elevation="0" Class="pa-3" Style="background-color: #e3f2fd;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.body2" Color="Color.Info">Submitted</MudText>
+                        <MudText Typo="Typo.h4">0</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.AssignmentTurnedIn" Size="Size.Large" Color="Color.Info" />
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudPaper Elevation="0" Class="pa-3" Style="background-color: #e8f5e9;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.body2" Color="Color.Success">Approved</MudText>
+                        <MudText Typo="Typo.h4">0</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Large" Color="Color.Success" />
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudPaper Elevation="0" Class="pa-3" Style="background-color: #fff3e0;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.body2" Color="Color.Warning">In Progress</MudText>
+                        <MudText Typo="Typo.h4">0</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.Pending" Size="Size.Large" Color="Color.Warning" />
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudPaper Elevation="0" Class="pa-3" Style="background-color: #ffebee;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.body2" Color="Color.Error">Overdue</MudText>
+                        <MudText Typo="Typo.h4">0</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Error" />
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudText Typo="Typo.h6" Class="mb-3">Pending Work Orders</MudText>
+
+    <MudTable Items="@_workOrders" Hover="true" Striped="true" Dense="true">
+        <HeaderContent>
+            <MudTh>Order #</MudTh>
+            <MudTh>Title</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Priority</MudTh>
+            <MudTh>Due Date</MudTh>
+            <MudTh>Days Pending</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Order #">@context.OrderNumber</MudTd>
+            <MudTd DataLabel="Title">@context.Title</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip Size="Size.Small" Color="Color.Info">@context.Status</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Priority">
+                <MudChip Size="Size.Small" Color="Color.Warning">@context.Priority</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Due Date">
+                @if (context.DueDate.HasValue)
+                {
+                    @context.DueDate.Value.ToShortDateString()
+                }
+                else
+                {
+                    <MudText Color="Color.Secondary">N/A</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Days Pending">
+                <MudText>-</MudText>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Primary" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Color="Color.Secondary">No pending work orders found.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudPaper>
+
+<MudStack Row="true" Justify="Justify.Center" Class="mt-4">
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/work-orders" StartIcon="@Icons.Material.Filled.Assignment">
+        Go to Work Orders
+    </MudButton>
+    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Href="/" StartIcon="@Icons.Material.Filled.Dashboard">
+        Back to Dashboard
+    </MudButton>
+</MudStack>
+
+@code {
+    private List<WorkOrderDto> _workOrders = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Placeholder - will be implemented when work order API is complete
+        await Task.CompletedTask;
+    }
+}

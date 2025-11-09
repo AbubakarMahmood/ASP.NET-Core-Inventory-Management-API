@@ -1,0 +1,256 @@
+@page "/reports/low-stock"
+@attribute [Authorize]
+@inject ProductService ProductService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>Low Stock Report - Inventory Management</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Low Stock Report</MudText>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <MudPaper Elevation="0" Class="pa-3" Style="background-color: #fff3e0;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.body2" Color="Color.Warning">Low Stock Items</MudText>
+                        <MudText Typo="Typo.h4">@_lowStockProducts.Count</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Warning" />
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudPaper Elevation="0" Class="pa-3" Style="background-color: #ffebee;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.body2" Color="Color.Error">Critical Stock</MudText>
+                        <MudText Typo="Typo.h4">@_criticalStockCount</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Large" Color="Color.Error" />
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudPaper Elevation="0" Class="pa-3" Style="background-color: #e3f2fd;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.body2" Color="Color.Info">Reorder Needed</MudText>
+                        <MudText Typo="Typo.h4">@_reorderQuantityNeeded</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Size="Size.Large" Color="Color.Info" />
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudPaper Elevation="0" Class="pa-3" Style="background-color: #f3e5f5;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Estimated Cost</MudText>
+                        <MudText Typo="Typo.h4">$@_totalReorderCost.ToString("N2")</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Size="Size.Large" Color="Color.Secondary" />
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+        <MudText Typo="Typo.h6">Low Stock Items Details</MudText>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadDataAsync" Disabled="@_isLoading">
+                Refresh
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportToCsvAsync" Disabled="@_isLoading">
+                Export CSV
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    <MudTable Items="@_lowStockProducts" Hover="true" Striped="true" Dense="true" Loading="@_isLoading" Filter="new Func<ProductDto,bool>(FilterFunc)">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_searchString" Placeholder="Search products..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>SKU</MudTh>
+            <MudTh>Product Name</MudTh>
+            <MudTh>Category</MudTh>
+            <MudTh>Current Stock</MudTh>
+            <MudTh>Reorder Point</MudTh>
+            <MudTh>Stock Deficit</MudTh>
+            <MudTh>Reorder Qty</MudTh>
+            <MudTh>Unit Cost</MudTh>
+            <MudTh>Reorder Cost</MudTh>
+            <MudTh>Location</MudTh>
+            <MudTh>Status</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="SKU">
+                <MudText Typo="Typo.body2" Class="font-weight-bold">@context.SKU</MudText>
+            </MudTd>
+            <MudTd DataLabel="Product Name">@context.Name</MudTd>
+            <MudTd DataLabel="Category">@context.Category</MudTd>
+            <MudTd DataLabel="Current Stock">
+                <MudText Color="@GetStockColor(context)">@context.CurrentStock @context.UnitOfMeasure</MudText>
+            </MudTd>
+            <MudTd DataLabel="Reorder Point">@context.ReorderPoint @context.UnitOfMeasure</MudTd>
+            <MudTd DataLabel="Stock Deficit">
+                <MudChip Size="Size.Small" Color="@GetDeficitColor(context)">
+                    @GetStockDeficit(context) @context.UnitOfMeasure
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Reorder Qty">@context.ReorderQuantity @context.UnitOfMeasure</MudTd>
+            <MudTd DataLabel="Unit Cost">$@context.UnitCost.ToString("N2")</MudTd>
+            <MudTd DataLabel="Reorder Cost">
+                <MudText Class="font-weight-bold">$@GetReorderCost(context).ToString("N2")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Location">@context.Location</MudTd>
+            <MudTd DataLabel="Status">
+                @if (GetStockDeficit(context) >= context.ReorderPoint * 0.5)
+                {
+                    <MudChip Size="Size.Small" Color="Color.Error">Critical</MudChip>
+                }
+                else
+                {
+                    <MudChip Size="Size.Small" Color="Color.Warning">Low</MudChip>
+                }
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@if (_lowStockProducts.Count == 0 && !_isLoading)
+{
+    <MudAlert Severity="Severity.Success" Class="mt-4">
+        <MudText Typo="Typo.h6">Great news!</MudText>
+        <MudText>All products are currently at or above their reorder points. No action needed.</MudText>
+    </MudAlert>
+}
+
+@code {
+    private List<ProductDto> _lowStockProducts = new();
+    private bool _isLoading = false;
+    private string _searchString = "";
+    private int _criticalStockCount = 0;
+    private int _reorderQuantityNeeded = 0;
+    private decimal _totalReorderCost = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            // Load all low stock products
+            var result = await ProductService.GetProductsAsync(1, 1000, lowStockOnly: true);
+
+            if (result != null)
+            {
+                _lowStockProducts = result.Items;
+
+                // Calculate metrics
+                _criticalStockCount = _lowStockProducts.Count(p => GetStockDeficit(p) >= p.ReorderPoint * 0.5);
+                _reorderQuantityNeeded = _lowStockProducts.Sum(p => p.ReorderQuantity);
+                _totalReorderCost = _lowStockProducts.Sum(p => p.ReorderQuantity * p.UnitCost);
+            }
+
+            Snackbar.Add($"Loaded {_lowStockProducts.Count} low stock items", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private bool FilterFunc(ProductDto product)
+    {
+        if (string.IsNullOrWhiteSpace(_searchString))
+            return true;
+
+        if (product.SKU.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (product.Name.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (product.Category.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
+    }
+
+    private int GetStockDeficit(ProductDto product)
+    {
+        return Math.Max(0, product.ReorderPoint - product.CurrentStock);
+    }
+
+    private decimal GetReorderCost(ProductDto product)
+    {
+        return product.ReorderQuantity * product.UnitCost;
+    }
+
+    private Color GetStockColor(ProductDto product)
+    {
+        var deficit = GetStockDeficit(product);
+        if (deficit >= product.ReorderPoint * 0.5)
+            return Color.Error;
+        return Color.Warning;
+    }
+
+    private Color GetDeficitColor(ProductDto product)
+    {
+        var deficit = GetStockDeficit(product);
+        if (deficit >= product.ReorderPoint * 0.5)
+            return Color.Error;
+        return Color.Warning;
+    }
+
+    private async Task ExportToCsvAsync()
+    {
+        try
+        {
+            var csv = new System.Text.StringBuilder();
+            csv.AppendLine("SKU,Product Name,Category,Current Stock,Reorder Point,Stock Deficit,Reorder Qty,Unit Cost,Reorder Cost,Location,Status");
+
+            foreach (var product in _lowStockProducts)
+            {
+                var deficit = GetStockDeficit(product);
+                var reorderCost = GetReorderCost(product);
+                var status = deficit >= product.ReorderPoint * 0.5 ? "Critical" : "Low";
+
+                csv.AppendLine($"\"{product.SKU}\",\"{product.Name}\",\"{product.Category}\",{product.CurrentStock},{product.ReorderPoint},{deficit},{product.ReorderQuantity},{product.UnitCost:F2},{reorderCost:F2},\"{product.Location}\",{status}");
+            }
+
+            var bytes = System.Text.Encoding.UTF8.GetBytes(csv.ToString());
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"LowStockReport_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+
+            await JS.InvokeVoidAsync("downloadFile", fileName, base64);
+            Snackbar.Add("Report exported successfully!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+    }
+}

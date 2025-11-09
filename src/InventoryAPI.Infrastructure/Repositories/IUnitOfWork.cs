@@ -12,6 +12,7 @@ public interface IUnitOfWork : IDisposable
     IRepository<WorkOrder> WorkOrders { get; }
     IRepository<WorkOrderItem> WorkOrderItems { get; }
     IRepository<StockMovement> StockMovements { get; }
+    IRepository<FilterPreset> FilterPresets { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     Task BeginTransactionAsync(CancellationToken cancellationToken = default);

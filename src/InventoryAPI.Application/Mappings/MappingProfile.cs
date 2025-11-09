@@ -26,6 +26,28 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.PerformedByName, opt => opt.Ignore())
             .ForMember(dest => dest.WorkOrderNumber, opt => opt.Ignore());
 
+        // WorkOrder mappings
+        CreateMap<WorkOrder, WorkOrderDto>()
+            .ForMember(dest => dest.RequestedByName, opt => opt.Ignore())
+            .ForMember(dest => dest.RequestedByEmail, opt => opt.Ignore())
+            .ForMember(dest => dest.AssignedToName, opt => opt.Ignore())
+            .ForMember(dest => dest.AssignedToEmail, opt => opt.Ignore())
+            .ForMember(dest => dest.Items, opt => opt.Ignore());
+
+        CreateMap<WorkOrderItem, WorkOrderItemDto>()
+            .ForMember(dest => dest.ProductSKU, opt => opt.Ignore())
+            .ForMember(dest => dest.ProductName, opt => opt.Ignore())
+            .ForMember(dest => dest.UnitOfMeasure, opt => opt.Ignore())
+            .ForMember(dest => dest.CurrentStock, opt => opt.Ignore());
+
+        CreateMap<CreateWorkOrderCommand, WorkOrder>();
+
+        // User mappings
+        CreateMap<User, UserDto>()
+            .ForMember(dest => dest.FullName, opt => opt.MapFrom(src => src.FullName));
+
+        // FilterPreset mappings
+        CreateMap<FilterPreset, FilterPresetDto>();
         CreateMap<RecordStockMovementCommand, StockMovement>();
         // Add more mappings as needed
     }

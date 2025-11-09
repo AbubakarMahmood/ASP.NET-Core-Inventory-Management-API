@@ -1,0 +1,222 @@
+@page "/users"
+@attribute [Authorize(Roles = "Admin")]
+@inject UserService UserService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager NavigationManager
+
+<PageTitle>User Management - Inventory Management</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">User Management</MudText>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudText Typo="Typo.h6" Class="mb-3">Filters</MudText>
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <MudSelect T="UserRole?" @bind-Value="_selectedRole" Label="Role" Clearable="true" AdornmentIcon="@Icons.Material.Filled.Badge">
+                <MudSelectItem T="UserRole?" Value="@((UserRole?)null)">All Roles</MudSelectItem>
+                <MudSelectItem T="UserRole?" Value="@UserRole.Operator">Operator</MudSelectItem>
+                <MudSelectItem T="UserRole?" Value="@UserRole.Manager">Manager</MudSelectItem>
+                <MudSelectItem T="UserRole?" Value="@UserRole.Admin">Admin</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudSelect T="bool?" @bind-Value="_selectedIsActive" Label="Status" Clearable="true" AdornmentIcon="@Icons.Material.Filled.ToggleOn">
+                <MudSelectItem T="bool?" Value="@((bool?)null)">All Status</MudSelectItem>
+                <MudSelectItem T="bool?" Value="@true">Active</MudSelectItem>
+                <MudSelectItem T="bool?" Value="@false">Inactive</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudTextField @bind-Value="_searchTerm" Label="Search" Placeholder="Email, name..." Clearable="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+        </MudItem>
+        <MudItem xs="12" md="2" Class="d-flex align-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="ApplyFiltersAsync" FullWidth="true" Disabled="@_isLoading">
+                Apply Filters
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+        <MudText Typo="Typo.h6">Users (@_users.Count)</MudText>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadDataAsync" Disabled="@_isLoading">
+                Refresh
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="NavigateToCreate">
+                Add User
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    <MudTable Items="@_users" Hover="true" Striped="true" Dense="true" Loading="@_isLoading">
+        <HeaderContent>
+            <MudTh>Email</MudTh>
+            <MudTh>Name</MudTh>
+            <MudTh>Role</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Created</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Email">
+                <MudText Typo="Typo.body2" Class="font-weight-bold">@context.Email</MudText>
+            </MudTd>
+            <MudTd DataLabel="Name">
+                <MudText Typo="Typo.body2">@context.FullName</MudText>
+            </MudTd>
+            <MudTd DataLabel="Role">
+                <MudChip Size="Size.Small" Color="@GetRoleColor(context.Role)">
+                    @context.Role.ToString()
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)" Variant="Variant.Outlined">
+                    @(context.IsActive ? "Active" : "Inactive")
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Created">
+                <MudText Typo="Typo.body2">@context.CreatedAt.ToString("yyyy-MM-dd")</MudText>
+                <MudText Typo="Typo.caption">By: @context.CreatedBy</MudText>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
+                    <MudMenuItem OnClick="@(() => NavigateToEdit(context.Id))" Icon="@Icons.Material.Filled.Edit">Edit</MudMenuItem>
+                    <MudMenuItem OnClick="@(() => ShowChangePasswordDialog(context))" Icon="@Icons.Material.Filled.Lock">Change Password</MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem OnClick="@(() => DeleteUserAsync(context.Id, context.Email))" Icon="@Icons.Material.Filled.Delete">Delete</MudMenuItem>
+                </MudMenu>
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 20, 50 }" />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@if (_users.Count == 0 && !_isLoading)
+{
+    <MudAlert Severity="Severity.Info" Class="mt-4">
+        <MudText Typo="Typo.h6">No users found</MudText>
+        <MudText>Try adjusting your filters or add your first user.</MudText>
+    </MudAlert>
+}
+
+@code {
+    private List<UserDto> _users = new();
+    private bool _isLoading = false;
+
+    // Filters
+    private UserRole? _selectedRole;
+    private bool? _selectedIsActive;
+    private string? _searchTerm;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            var result = await UserService.GetUsersAsync(
+                pageNumber: 1,
+                pageSize: 100,
+                role: _selectedRole,
+                isActive: _selectedIsActive,
+                searchTerm: _searchTerm
+            );
+
+            if (result != null)
+            {
+                _users = result.Items;
+                Snackbar.Add($"Loaded {_users.Count} users", Severity.Info);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading users: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private Color GetRoleColor(UserRole role) => role switch
+    {
+        UserRole.Operator => Color.Info,
+        UserRole.Manager => Color.Primary,
+        UserRole.Admin => Color.Error,
+        _ => Color.Default
+    };
+
+    private void NavigateToCreate()
+    {
+        NavigationManager.NavigateTo("/users/create");
+    }
+
+    private void NavigateToEdit(Guid id)
+    {
+        NavigationManager.NavigateTo($"/users/edit/{id}");
+    }
+
+    private async Task ShowChangePasswordDialog(UserDto user)
+    {
+        var parameters = new DialogParameters
+        {
+            ["UserId"] = user.Id,
+            ["UserEmail"] = user.Email
+        };
+
+        var dialog = await DialogService.ShowAsync<ChangePasswordDialog>("Change Password", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            Snackbar.Add($"Password changed for {user.Email}", Severity.Success);
+        }
+    }
+
+    private async Task DeleteUserAsync(Guid id, string email)
+    {
+        bool? confirm = await DialogService.ShowMessageBox(
+            "Confirm Delete",
+            $"Are you sure you want to delete user '{email}'? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel"
+        );
+
+        if (confirm == true)
+        {
+            try
+            {
+                var success = await UserService.DeleteUserAsync(id);
+                if (success)
+                {
+                    Snackbar.Add($"User {email} deleted successfully", Severity.Success);
+                    await LoadDataAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting user: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}

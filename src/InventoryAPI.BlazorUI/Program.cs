@@ -26,6 +26,10 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<ProductService>();
 builder.Services.AddScoped<WorkOrderService>();
 builder.Services.AddScoped<StockMovementService>();
+builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<AuditService>();
+builder.Services.AddScoped<SignalRNotificationService>();
+builder.Services.AddScoped<FilterPresetService>();
 
 // Add authentication
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();

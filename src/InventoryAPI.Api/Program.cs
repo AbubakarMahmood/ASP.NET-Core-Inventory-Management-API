@@ -31,6 +31,9 @@ builder.Host.UseSerilog();
 // Add services to the container
 builder.Services.AddControllers();
 
+// SignalR
+builder.Services.AddSignalR();
+
 // Database
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -43,6 +46,7 @@ builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
+builder.Services.AddSingleton<INotificationService, NotificationService>();
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(MappingProfile));
@@ -82,7 +86,7 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// CORS
+// CORS (with SignalR support)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -90,6 +94,15 @@ builder.Services.AddCors(options =>
         policy.AllowAnyOrigin()
               .AllowAnyMethod()
               .AllowAnyHeader();
+    });
+
+    // Additional policy for SignalR (needs credentials)
+    options.AddPolicy("SignalRPolicy", policy =>
+    {
+        policy.WithOrigins("http://localhost:5001", "https://localhost:5001")
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
@@ -196,6 +209,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapHub<InventoryAPI.Api.Hubs.NotificationHub>("/api/v1/notifications");
 
 app.MapHealthChecks("/api/v1/health");
 

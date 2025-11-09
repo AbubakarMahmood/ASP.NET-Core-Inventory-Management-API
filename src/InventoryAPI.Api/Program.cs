@@ -2,7 +2,9 @@ using System.Reflection;
 using System.Text;
 using FluentValidation;
 using InventoryAPI.Api.Middleware;
+using InventoryAPI.Api.Services;
 using InventoryAPI.Application.Behaviors;
+using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Application.Mappings;
 using InventoryAPI.Infrastructure.Data;
 using InventoryAPI.Infrastructure.Repositories;
@@ -40,6 +42,7 @@ builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 // Services
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
+builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(MappingProfile));

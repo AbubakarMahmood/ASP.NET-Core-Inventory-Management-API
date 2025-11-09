@@ -4,6 +4,8 @@
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject IJSRuntime JSRuntime
+@inject HttpClient HttpClient
 
 <PageTitle>Products - Inventory Management</PageTitle>
 
@@ -39,6 +41,16 @@
         <MudItem xs="12" md="3">
             <MudStack Row="true" Spacing="2">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchAsync" StartIcon="@Icons.Material.Filled.Search">Search</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Info" OnClick="ExportToExcelAsync" StartIcon="@Icons.Material.Filled.Download" Disabled="@_isExporting">
+                    @if (_isExporting)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    }
+                    else
+                    {
+                        <span>Export</span>
+                    }
+                </MudButton>
                 <AuthorizeView Roles="Admin,Manager">
                     <MudButton Variant="Variant.Filled" Color="Color.Secondary" Href="/products/create" StartIcon="@Icons.Material.Filled.Add">Add Product</MudButton>
                 </AuthorizeView>
@@ -100,6 +112,7 @@
 @code {
     private List<ProductDto> _products = new();
     private bool _isLoading = false;
+    private bool _isExporting = false;
     private string _searchTerm = "";
     private string _selectedCategory = "";
     private bool _lowStockOnly = false;
@@ -179,6 +192,49 @@
             {
                 Snackbar.Add($"Error deleting product: {ex.Message}", Severity.Error);
             }
+        }
+    }
+
+    private async Task ExportToExcelAsync()
+    {
+        _isExporting = true;
+
+        try
+        {
+            var queryParams = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(_selectedCategory))
+                queryParams.Add($"category={Uri.EscapeDataString(_selectedCategory)}");
+
+            if (!string.IsNullOrWhiteSpace(_searchTerm))
+                queryParams.Add($"searchTerm={Uri.EscapeDataString(_searchTerm)}");
+
+            if (_lowStockOnly)
+                queryParams.Add("lowStockOnly=true");
+
+            var query = queryParams.Any() ? $"?{string.Join("&", queryParams)}" : "";
+            var response = await HttpClient.GetAsync($"api/v1/products/export{query}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var fileBytes = await response.Content.ReadAsByteArrayAsync();
+                var fileName = $"Products_{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+                await JSRuntime.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(fileBytes));
+                Snackbar.Add("Products exported successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to export products", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error exporting products: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isExporting = false;
         }
     }
 }

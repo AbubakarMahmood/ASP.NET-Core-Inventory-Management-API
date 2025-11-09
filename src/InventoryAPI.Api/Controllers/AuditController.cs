@@ -1,4 +1,5 @@
 using InventoryAPI.Application.DTOs;
+using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Application.Queries.Audit;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -17,11 +18,13 @@ public class AuditController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly ILogger<AuditController> _logger;
+    private readonly IExcelExportService _excelExportService;
 
-    public AuditController(IMediator mediator, ILogger<AuditController> logger)
+    public AuditController(IMediator mediator, ILogger<AuditController> logger, IExcelExportService excelExportService)
     {
         _mediator = mediator;
         _logger = logger;
+        _excelExportService = excelExportService;
     }
 
     /// <summary>
@@ -69,5 +72,45 @@ public class AuditController : ControllerBase
             result.Items.Count, result.TotalCount);
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Export audit logs to Excel
+    /// </summary>
+    [HttpGet("export")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ExportAuditLogs(
+        [FromQuery] string? entityType = null,
+        [FromQuery] string? action = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] string? performedBy = null,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Exporting audit logs to Excel");
+
+        // Fetch all audit logs without pagination
+        var query = new GetAuditLogsQuery
+        {
+            PageNumber = 1,
+            PageSize = int.MaxValue,
+            EntityType = entityType,
+            Action = action,
+            FromDate = fromDate,
+            ToDate = toDate,
+            PerformedBy = performedBy
+        };
+
+        var result = await _mediator.Send(query, cancellationToken);
+
+        // Generate Excel file
+        var excelData = _excelExportService.ExportToExcel(result.Items, "AuditLogs");
+
+        _logger.LogInformation("Exported {Count} audit logs to Excel", result.Items.Count);
+
+        return File(excelData, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"AuditLogs_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
     }
 }

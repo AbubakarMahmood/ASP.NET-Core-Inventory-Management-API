@@ -3,6 +3,8 @@
 @inject WorkOrderService WorkOrderService
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+@inject HttpClient HttpClient
 
 <PageTitle>Work Orders - Inventory Management</PageTitle>
 
@@ -57,6 +59,16 @@
         <MudStack Row="true" Spacing="2">
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadDataAsync" Disabled="@_isLoading">
                 Refresh
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Info" OnClick="ExportToExcelAsync" StartIcon="@Icons.Material.Filled.Download" Disabled="@_isExporting">
+                @if (_isExporting)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                }
+                else
+                {
+                    <span>Export</span>
+                }
             </MudButton>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NavigateToCreate">
                 Create Work Order
@@ -184,6 +196,7 @@
 @code {
     private List<WorkOrderDto> _workOrders = new();
     private bool _isLoading = false;
+    private bool _isExporting = false;
     private string _searchString = "";
 
     // Filters
@@ -370,6 +383,52 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Error cancelling work order: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ExportToExcelAsync()
+    {
+        _isExporting = true;
+
+        try
+        {
+            var queryParams = new List<string>();
+
+            if (_selectedStatus.HasValue)
+                queryParams.Add($"status={_selectedStatus.Value}");
+
+            if (_selectedPriority.HasValue)
+                queryParams.Add($"priority={_selectedPriority.Value}");
+
+            if (_fromDate.HasValue)
+                queryParams.Add($"fromDate={Uri.EscapeDataString(_fromDate.Value.ToString("yyyy-MM-dd"))}");
+
+            if (_toDate.HasValue)
+                queryParams.Add($"toDate={Uri.EscapeDataString(_toDate.Value.ToString("yyyy-MM-dd"))}");
+
+            var query = queryParams.Any() ? $"?{string.Join("&", queryParams)}" : "";
+            var response = await HttpClient.GetAsync($"api/v1/workorders/export{query}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var fileBytes = await response.Content.ReadAsByteArrayAsync();
+                var fileName = $"WorkOrders_{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+                await JSRuntime.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(fileBytes));
+                Snackbar.Add("Work orders exported successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to export work orders", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error exporting work orders: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isExporting = false;
         }
     }
 }

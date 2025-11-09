@@ -1,6 +1,7 @@
 using InventoryAPI.Application.Commands.Products;
 using InventoryAPI.Application.Common;
 using InventoryAPI.Application.DTOs;
+using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Application.Queries.Products;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -20,11 +21,13 @@ public class ProductsController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly ILogger<ProductsController> _logger;
+    private readonly IExcelExportService _excelExportService;
 
-    public ProductsController(IMediator mediator, ILogger<ProductsController> logger)
+    public ProductsController(IMediator mediator, ILogger<ProductsController> logger, IExcelExportService excelExportService)
     {
         _mediator = mediator;
         _logger = logger;
+        _excelExportService = excelExportService;
     }
 
     /// <summary>
@@ -140,5 +143,43 @@ public class ProductsController : ControllerBase
 
         // TODO: Implement DeleteProductCommand
         return StatusCode(StatusCodes.Status501NotImplemented, "Delete product not yet implemented");
+    }
+
+    /// <summary>
+    /// Export products to Excel
+    /// </summary>
+    /// <param name="category">Filter by category</param>
+    /// <param name="searchTerm">Search in name, SKU, or description</param>
+    /// <param name="lowStockOnly">Show only low stock items</param>
+    /// <returns>Excel file</returns>
+    /// <response code="200">Excel file generated successfully</response>
+    [HttpGet("export")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ExportProducts(
+        [FromQuery] string? category = null,
+        [FromQuery] string? searchTerm = null,
+        [FromQuery] bool? lowStockOnly = null)
+    {
+        _logger.LogInformation("Exporting products to Excel");
+
+        // Fetch all products without pagination
+        var query = new GetProductsQuery
+        {
+            PageNumber = 1,
+            PageSize = int.MaxValue,
+            Category = category,
+            SearchTerm = searchTerm,
+            LowStockOnly = lowStockOnly
+        };
+
+        var result = await _mediator.Send(query);
+
+        // Generate Excel file
+        var excelData = _excelExportService.ExportToExcel(result.Items, "Products");
+
+        _logger.LogInformation("Exported {Count} products to Excel", result.Items.Count);
+
+        return File(excelData, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"Products_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
     }
 }

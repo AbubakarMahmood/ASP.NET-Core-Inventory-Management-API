@@ -1,5 +1,6 @@
 using InventoryAPI.Application.Commands.WorkOrders;
 using InventoryAPI.Application.DTOs;
+using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Application.Queries.WorkOrders;
 using InventoryAPI.Domain.Enums;
 using MediatR;
@@ -19,11 +20,13 @@ public class WorkOrdersController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly ILogger<WorkOrdersController> _logger;
+    private readonly IExcelExportService _excelExportService;
 
-    public WorkOrdersController(IMediator mediator, ILogger<WorkOrdersController> logger)
+    public WorkOrdersController(IMediator mediator, ILogger<WorkOrdersController> logger, IExcelExportService excelExportService)
     {
         _mediator = mediator;
         _logger = logger;
+        _excelExportService = excelExportService;
     }
 
     /// <summary>
@@ -275,6 +278,47 @@ public class WorkOrdersController : ControllerBase
         _logger.LogInformation("Items issued for work order {WorkOrderId}", id);
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Export work orders to Excel
+    /// </summary>
+    [HttpGet("export")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ExportWorkOrders(
+        [FromQuery] WorkOrderStatus? status = null,
+        [FromQuery] WorkOrderPriority? priority = null,
+        [FromQuery] Guid? assignedToId = null,
+        [FromQuery] Guid? requestedById = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Exporting work orders to Excel");
+
+        // Fetch all work orders without pagination
+        var query = new GetWorkOrdersQuery
+        {
+            PageNumber = 1,
+            PageSize = int.MaxValue,
+            Status = status,
+            Priority = priority,
+            AssignedToId = assignedToId,
+            RequestedById = requestedById,
+            FromDate = fromDate,
+            ToDate = toDate
+        };
+
+        var result = await _mediator.Send(query, cancellationToken);
+
+        // Generate Excel file
+        var excelData = _excelExportService.ExportToExcel(result.Items, "WorkOrders");
+
+        _logger.LogInformation("Exported {Count} work orders to Excel", result.Items.Count);
+
+        return File(excelData, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"WorkOrders_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
     }
 }
 

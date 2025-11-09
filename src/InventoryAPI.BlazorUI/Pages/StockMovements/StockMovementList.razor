@@ -1,0 +1,390 @@
+@page "/stock-movements"
+@attribute [Authorize]
+@inject StockMovementService StockMovementService
+@inject ProductService ProductService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+
+<PageTitle>Stock Movements - Inventory Management</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Stock Movements</MudText>
+
+@if (_statistics != null)
+{
+    <MudPaper Elevation="2" Class="pa-4 mb-4">
+        <MudGrid>
+            <MudItem xs="12" md="2">
+                <MudPaper Elevation="0" Class="pa-3" Style="background-color: #e3f2fd;">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <div>
+                            <MudText Typo="Typo.body2" Color="Color.Info">Total Movements</MudText>
+                            <MudText Typo="Typo.h5">@_statistics.TotalMovements</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.Inventory" Size="Size.Large" Color="Color.Info" />
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudPaper Elevation="0" Class="pa-3" Style="background-color: #e8f5e9;">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <div>
+                            <MudText Typo="Typo.body2" Color="Color.Success">Receipts</MudText>
+                            <MudText Typo="Typo.h5">@_statistics.ReceiptCount</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Large" Color="Color.Success" />
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudPaper Elevation="0" Class="pa-3" Style="background-color: #ffebee;">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <div>
+                            <MudText Typo="Typo.body2" Color="Color.Error">Issues</MudText>
+                            <MudText Typo="Typo.h5">@_statistics.IssueCount</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.Remove" Size="Size.Large" Color="Color.Error" />
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudPaper Elevation="0" Class="pa-3" Style="background-color: #fff3e0;">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <div>
+                            <MudText Typo="Typo.body2" Color="Color.Warning">Adjustments</MudText>
+                            <MudText Typo="Typo.h5">@_statistics.AdjustmentCount</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.Tune" Size="Size.Large" Color="Color.Warning" />
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudPaper Elevation="0" Class="pa-3" Style="background-color: #f3e5f5;">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <div>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Quantity In</MudText>
+                            <MudText Typo="Typo.h5">@_statistics.TotalQuantityIn</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Large" Color="Color.Secondary" />
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudPaper Elevation="0" Class="pa-3" Style="background-color: #fce4ec;">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <div>
+                            <MudText Typo="Typo.body2" Style="color: #c2185b;">Quantity Out</MudText>
+                            <MudText Typo="Typo.h5">@_statistics.TotalQuantityOut</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="Size.Large" Style="color: #c2185b;" />
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+}
+
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudText Typo="Typo.h6" Class="mb-3">Filters</MudText>
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <MudSelect T="Guid?" @bind-Value="_selectedProductId" Label="Product" Clearable="true" AdornmentIcon="@Icons.Material.Filled.FilterList">
+                <MudSelectItem T="Guid?" Value="@((Guid?)null)">All Products</MudSelectItem>
+                @foreach (var product in _products)
+                {
+                    <MudSelectItem T="Guid?" Value="@product.Id">@product.SKU - @product.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudSelect T="StockMovementType?" @bind-Value="_selectedType" Label="Movement Type" Clearable="true" AdornmentIcon="@Icons.Material.Filled.SwapHoriz">
+                <MudSelectItem T="StockMovementType?" Value="@((StockMovementType?)null)">All Types</MudSelectItem>
+                <MudSelectItem T="StockMovementType?" Value="@StockMovementType.Receipt">Receipt</MudSelectItem>
+                <MudSelectItem T="StockMovementType?" Value="@StockMovementType.Issue">Issue</MudSelectItem>
+                <MudSelectItem T="StockMovementType?" Value="@StockMovementType.Adjustment">Adjustment</MudSelectItem>
+                <MudSelectItem T="StockMovementType?" Value="@StockMovementType.Transfer">Transfer</MudSelectItem>
+                <MudSelectItem T="StockMovementType?" Value="@StockMovementType.Return">Return</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudDatePicker @bind-Date="_fromDate" Label="From Date" Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudDatePicker @bind-Date="_toDate" Label="To Date" Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" md="3" Class="d-flex align-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="ApplyFiltersAsync" FullWidth="true" Disabled="@_isLoading">
+                Apply Filters
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+        <MudText Typo="Typo.h6">Movement History</MudText>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadDataAsync" Disabled="@_isLoading">
+                Refresh
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportToCsvAsync" Disabled="@_isLoading">
+                Export CSV
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NavigateToRecord">
+                Record Movement
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    <MudTable Items="@_stockMovements" Hover="true" Striped="true" Dense="true" Loading="@_isLoading" Filter="new Func<StockMovementDto,bool>(FilterFunc)">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_searchString" Placeholder="Search movements..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Timestamp</MudTh>
+            <MudTh>Product</MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh>Quantity</MudTh>
+            <MudTh>From Location</MudTh>
+            <MudTh>To Location</MudTh>
+            <MudTh>Current Stock</MudTh>
+            <MudTh>Reason</MudTh>
+            <MudTh>Reference</MudTh>
+            <MudTh>Performed By</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Timestamp">
+                <MudText Typo="Typo.body2">@context.Timestamp.ToString("yyyy-MM-dd HH:mm")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Product">
+                <MudText Typo="Typo.body2" Class="font-weight-bold">@context.ProductSKU</MudText>
+                <MudText Typo="Typo.caption">@context.ProductName</MudText>
+            </MudTd>
+            <MudTd DataLabel="Type">
+                <MudChip Size="Size.Small" Color="@GetMovementTypeColor(context.Type)">
+                    @context.Type.ToString()
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Quantity">
+                <MudText Color="@GetQuantityColor(context.Type)">
+                    @GetQuantityPrefix(context.Type)@context.Quantity @context.UnitOfMeasure
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="From Location">@(context.FromLocation ?? "-")</MudTd>
+            <MudTd DataLabel="To Location">@(context.ToLocation ?? "-")</MudTd>
+            <MudTd DataLabel="Current Stock">
+                <MudText Class="font-weight-bold">@context.CurrentStock @context.UnitOfMeasure</MudText>
+            </MudTd>
+            <MudTd DataLabel="Reason">
+                @if (!string.IsNullOrEmpty(context.Reason))
+                {
+                    <MudTooltip Text="@context.Reason">
+                        <MudText Typo="Typo.body2">@(context.Reason.Length > 30 ? context.Reason.Substring(0, 27) + "..." : context.Reason)</MudText>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudText>-</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Reference">
+                @if (!string.IsNullOrEmpty(context.WorkOrderNumber))
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Primary">WO: @context.WorkOrderNumber</MudText>
+                }
+                else if (!string.IsNullOrEmpty(context.ReferenceNumber))
+                {
+                    <MudText Typo="Typo.body2">@context.ReferenceNumber</MudText>
+                }
+                else
+                {
+                    <MudText>-</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Performed By">
+                <MudText Typo="Typo.body2">@context.PerformedByName</MudText>
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 20, 50, 100 }" />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@if (_stockMovements.Count == 0 && !_isLoading)
+{
+    <MudAlert Severity="Severity.Info" Class="mt-4">
+        <MudText Typo="Typo.h6">No stock movements found</MudText>
+        <MudText>Try adjusting your filters or record your first stock movement.</MudText>
+    </MudAlert>
+}
+
+@code {
+    private List<StockMovementDto> _stockMovements = new();
+    private List<ProductDto> _products = new();
+    private StockMovementStatistics? _statistics;
+    private bool _isLoading = false;
+    private string _searchString = "";
+
+    // Filters
+    private Guid? _selectedProductId;
+    private StockMovementType? _selectedType;
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(
+            LoadProductsAsync(),
+            LoadDataAsync(),
+            LoadStatisticsAsync()
+        );
+    }
+
+    private async Task LoadProductsAsync()
+    {
+        try
+        {
+            var result = await ProductService.GetProductsAsync(1, 1000);
+            if (result != null)
+            {
+                _products = result.Items;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading products: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            var result = await StockMovementService.GetStockMovementsAsync(
+                pageNumber: 1,
+                pageSize: 100,
+                productId: _selectedProductId,
+                type: _selectedType,
+                fromDate: _fromDate,
+                toDate: _toDate
+            );
+
+            if (result != null)
+            {
+                _stockMovements = result.Items;
+                Snackbar.Add($"Loaded {_stockMovements.Count} stock movements", Severity.Info);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadStatisticsAsync()
+    {
+        try
+        {
+            _statistics = await StockMovementService.GetStatisticsAsync(_fromDate, _toDate);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading statistics: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        await Task.WhenAll(
+            LoadDataAsync(),
+            LoadStatisticsAsync()
+        );
+    }
+
+    private bool FilterFunc(StockMovementDto movement)
+    {
+        if (string.IsNullOrWhiteSpace(_searchString))
+            return true;
+
+        if (movement.ProductSKU.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (movement.ProductName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (movement.PerformedByName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (movement.ReferenceNumber?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+
+        return false;
+    }
+
+    private Color GetMovementTypeColor(StockMovementType type) => type switch
+    {
+        StockMovementType.Receipt => Color.Success,
+        StockMovementType.Issue => Color.Error,
+        StockMovementType.Adjustment => Color.Warning,
+        StockMovementType.Transfer => Color.Info,
+        StockMovementType.Return => Color.Secondary,
+        _ => Color.Default
+    };
+
+    private Color GetQuantityColor(StockMovementType type) => type switch
+    {
+        StockMovementType.Receipt or StockMovementType.Return => Color.Success,
+        StockMovementType.Issue => Color.Error,
+        _ => Color.Default
+    };
+
+    private string GetQuantityPrefix(StockMovementType type) => type switch
+    {
+        StockMovementType.Receipt or StockMovementType.Return => "+",
+        StockMovementType.Issue => "-",
+        _ => ""
+    };
+
+    private void NavigateToRecord()
+    {
+        NavigationManager.NavigateTo("/stock-movements/record");
+    }
+
+    private async Task ExportToCsvAsync()
+    {
+        try
+        {
+            var csv = new System.Text.StringBuilder();
+            csv.AppendLine("Timestamp,Product SKU,Product Name,Type,Quantity,Unit,From Location,To Location,Current Stock,Reason,Reference,Work Order,Performed By");
+
+            foreach (var movement in _stockMovements)
+            {
+                var prefix = GetQuantityPrefix(movement.Type);
+                csv.AppendLine($"{movement.Timestamp:yyyy-MM-dd HH:mm},\"{movement.ProductSKU}\",\"{movement.ProductName}\",{movement.Type},{prefix}{movement.Quantity},{movement.UnitOfMeasure},\"{movement.FromLocation ?? ""}\",\"{movement.ToLocation ?? ""}\",{movement.CurrentStock},\"{movement.Reason ?? ""}\",\"{movement.ReferenceNumber ?? ""}\",\"{movement.WorkOrderNumber ?? ""}\",\"{movement.PerformedByName}\"");
+            }
+
+            var bytes = System.Text.Encoding.UTF8.GetBytes(csv.ToString());
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"StockMovements_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+
+            await JS.InvokeVoidAsync("downloadFile", fileName, base64);
+            Snackbar.Add("Stock movements exported successfully!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+    }
+}

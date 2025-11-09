@@ -1,0 +1,302 @@
+@page "/stock-movements/record"
+@attribute [Authorize]
+@inject StockMovementService StockMovementService
+@inject ProductService ProductService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+
+<PageTitle>Record Stock Movement - Inventory Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium">
+    <MudPaper Elevation="2" Class="pa-4">
+        <MudStack Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.h5">Record Stock Movement</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="NavigateBack" />
+            </MudStack>
+
+            @if (_isLoading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+
+            <MudForm @ref="_form" @bind-IsValid="@_formIsValid">
+                <MudGrid>
+                    <!-- Product Selection -->
+                    <MudItem xs="12">
+                        <MudSelect T="Guid?" @bind-Value="_model.ProductId" Label="Product" Required="true" RequiredError="Product is required" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.Inventory2">
+                            @foreach (var product in _products)
+                            {
+                                <MudSelectItem T="Guid?" Value="@product.Id">
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                        <MudText>@product.SKU - @product.Name</MudText>
+                                        <MudChip Size="Size.Small" Color="@(product.IsLowStock ? Color.Warning : Color.Success)">
+                                            Stock: @product.CurrentStock @product.UnitOfMeasure
+                                        </MudChip>
+                                    </MudStack>
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+
+                    <!-- Movement Type -->
+                    <MudItem xs="12" md="6">
+                        <MudSelect T="StockMovementType" @bind-Value="_model.Type" Label="Movement Type" Required="true" RequiredError="Movement type is required" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.SwapHoriz">
+                            <MudSelectItem T="StockMovementType" Value="@StockMovementType.Receipt">
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Size="Size.Small" />
+                                    <MudText>Receipt (Stock In)</MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                            <MudSelectItem T="StockMovementType" Value="@StockMovementType.Issue">
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Error" Size="Size.Small" />
+                                    <MudText>Issue (Stock Out)</MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                            <MudSelectItem T="StockMovementType" Value="@StockMovementType.Adjustment">
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.Tune" Color="Color.Warning" Size="Size.Small" />
+                                    <MudText>Adjustment (Correction)</MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                            <MudSelectItem T="StockMovementType" Value="@StockMovementType.Transfer">
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.CompareArrows" Color="Color.Info" Size="Size.Small" />
+                                    <MudText>Transfer (Location Change)</MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                            <MudSelectItem T="StockMovementType" Value="@StockMovementType.Return">
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.Undo" Color="Color.Secondary" Size="Size.Small" />
+                                    <MudText>Return (Stock Back)</MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+
+                    <!-- Quantity -->
+                    <MudItem xs="12" md="6">
+                        <MudNumericField @bind-Value="_model.Quantity" Label="Quantity" Required="true" RequiredError="Quantity is required" Min="1" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.Numbers" />
+                    </MudItem>
+
+                    <!-- From Location -->
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_model.FromLocation" Label="From Location" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.LocationOn" Placeholder="e.g., Warehouse A, Shelf 12" />
+                        <MudText Typo="Typo.caption" Class="mt-1">Required for Transfer and Issue movements</MudText>
+                    </MudItem>
+
+                    <!-- To Location -->
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_model.ToLocation" Label="To Location" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.LocationOn" Placeholder="e.g., Warehouse B, Shelf 5" />
+                        <MudText Typo="Typo.caption" Class="mt-1">Required for Transfer and Receipt movements</MudText>
+                    </MudItem>
+
+                    <!-- Reason -->
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Reason" Label="Reason / Notes" Lines="3" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.Notes" Placeholder="Describe the reason for this stock movement..." />
+                    </MudItem>
+
+                    <!-- Reference Number -->
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_model.ReferenceNumber" Label="Reference Number" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.Tag" Placeholder="e.g., PO-12345, INV-6789" />
+                        <MudText Typo="Typo.caption" Class="mt-1">Purchase Order, Invoice, or other reference</MudText>
+                    </MudItem>
+
+                    <!-- Work Order ID (optional) -->
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_workOrderIdString" Label="Work Order ID (Optional)" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.Work" Placeholder="Enter Work Order GUID if applicable" />
+                        <MudText Typo="Typo.caption" Class="mt-1">Link this movement to a work order</MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudForm>
+
+            @if (_selectedProduct != null)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <MudStack Row="true" Spacing="4">
+                        <div>
+                            <MudText Typo="Typo.caption">Current Stock</MudText>
+                            <MudText Typo="Typo.body1" Class="font-weight-bold">@_selectedProduct.CurrentStock @_selectedProduct.UnitOfMeasure</MudText>
+                        </div>
+                        <div>
+                            <MudText Typo="Typo.caption">After Movement</MudText>
+                            <MudText Typo="Typo.body1" Class="font-weight-bold" Color="@GetProjectedStockColor()">
+                                @GetProjectedStock() @_selectedProduct.UnitOfMeasure
+                            </MudText>
+                        </div>
+                        @if (_model.Type == StockMovementType.Issue && GetProjectedStock() < 0)
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Error">⚠ Insufficient stock!</MudText>
+                        }
+                    </MudStack>
+                </MudAlert>
+            }
+
+            <MudStack Row="true" Spacing="2" Justify="Justify.End">
+                <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="NavigateBack" Disabled="@_isSubmitting">
+                    Cancel
+                </MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SubmitAsync" Disabled="@(!_formIsValid || _isSubmitting)" StartIcon="@Icons.Material.Filled.Save">
+                    @if (_isSubmitting)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        <MudText Class="ml-2">Recording...</MudText>
+                    }
+                    else
+                    {
+                        <MudText>Record Movement</MudText>
+                    }
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm? _form;
+    private bool _formIsValid;
+    private bool _isLoading = false;
+    private bool _isSubmitting = false;
+    private List<ProductDto> _products = new();
+    private ProductDto? _selectedProduct;
+    private string _workOrderIdString = string.Empty;
+
+    private RecordStockMovementRequest _model = new()
+    {
+        Type = StockMovementType.Receipt,
+        Quantity = 1
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProductsAsync();
+    }
+
+    private async Task LoadProductsAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            var result = await ProductService.GetProductsAsync(1, 1000);
+            if (result != null)
+            {
+                _products = result.Items.OrderBy(p => p.SKU).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading products: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void OnProductChanged()
+    {
+        _selectedProduct = _products.FirstOrDefault(p => p.Id == _model.ProductId);
+        StateHasChanged();
+    }
+
+    private int GetProjectedStock()
+    {
+        if (_selectedProduct == null) return 0;
+
+        return _model.Type switch
+        {
+            StockMovementType.Receipt or StockMovementType.Return => _selectedProduct.CurrentStock + _model.Quantity,
+            StockMovementType.Issue => _selectedProduct.CurrentStock - _model.Quantity,
+            StockMovementType.Adjustment => _model.Quantity, // Adjustment sets absolute value
+            StockMovementType.Transfer => _selectedProduct.CurrentStock, // Transfer doesn't change total
+            _ => _selectedProduct.CurrentStock
+        };
+    }
+
+    private Color GetProjectedStockColor()
+    {
+        var projected = GetProjectedStock();
+        if (projected < 0) return Color.Error;
+        if (_selectedProduct != null && projected <= _selectedProduct.ReorderPoint) return Color.Warning;
+        return Color.Success;
+    }
+
+    private async Task SubmitAsync()
+    {
+        // Validate form
+        if (_form == null || !_formIsValid)
+        {
+            Snackbar.Add("Please fill in all required fields", Severity.Warning);
+            return;
+        }
+
+        // Update selected product
+        _selectedProduct = _products.FirstOrDefault(p => p.Id == _model.ProductId);
+
+        // Validate sufficient stock for Issue operations
+        if (_model.Type == StockMovementType.Issue && _selectedProduct != null)
+        {
+            if (_selectedProduct.CurrentStock < _model.Quantity)
+            {
+                Snackbar.Add($"Insufficient stock! Available: {_selectedProduct.CurrentStock}, Requested: {_model.Quantity}", Severity.Error);
+                return;
+            }
+        }
+
+        // Validate locations for Transfer
+        if (_model.Type == StockMovementType.Transfer)
+        {
+            if (string.IsNullOrWhiteSpace(_model.FromLocation) || string.IsNullOrWhiteSpace(_model.ToLocation))
+            {
+                Snackbar.Add("Both From Location and To Location are required for transfers", Severity.Warning);
+                return;
+            }
+        }
+
+        // Parse Work Order ID if provided
+        if (!string.IsNullOrWhiteSpace(_workOrderIdString) && Guid.TryParse(_workOrderIdString, out var workOrderId))
+        {
+            _model.WorkOrderId = workOrderId;
+        }
+
+        _isSubmitting = true;
+
+        try
+        {
+            var result = await StockMovementService.RecordStockMovementAsync(_model);
+
+            if (result != null)
+            {
+                Snackbar.Add($"Stock movement recorded successfully! New stock level: {result.CurrentStock}", Severity.Success);
+                NavigationManager.NavigateTo("/stock-movements");
+            }
+            else
+            {
+                Snackbar.Add("Failed to record stock movement", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error recording movement: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private void NavigateBack()
+    {
+        NavigationManager.NavigateTo("/stock-movements");
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_model.ProductId.HasValue)
+        {
+            OnProductChanged();
+        }
+    }
+}

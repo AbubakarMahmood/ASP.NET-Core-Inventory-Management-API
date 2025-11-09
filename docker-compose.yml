@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    container_name: inventory-postgres
+    environment:
+      POSTGRES_DB: inventorydb
+      POSTGRES_USER: inventoryuser
+      POSTGRES_PASSWORD: InventoryPass123!
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - inventory-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventoryuser -d inventorydb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inventory-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=inventorydb;Username=inventoryuser;Password=InventoryPass123!
+      - JwtSettings__SecretKey=YourSuperSecretKeyThatIsAtLeast32CharactersLongForSecurity
+      - JwtSettings__Issuer=InventoryAPI
+      - JwtSettings__Audience=InventoryAPIUsers
+      - JwtSettings__ExpiryMinutes=60
+      - JwtSettings__RefreshTokenExpiryDays=7
+    ports:
+      - "5000:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inventory-network
+    restart: unless-stopped
+
+networks:
+  inventory-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

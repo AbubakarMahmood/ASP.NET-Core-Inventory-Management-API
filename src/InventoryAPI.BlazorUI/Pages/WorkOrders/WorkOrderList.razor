@@ -1,12 +1,375 @@
 @page "/work-orders"
 @attribute [Authorize]
+@inject WorkOrderService WorkOrderService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
 
 <PageTitle>Work Orders - Inventory Management</PageTitle>
 
 <MudText Typo="Typo.h4" Class="mb-4">Work Orders</MudText>
 
-<MudAlert Severity="Severity.Info" Class="mb-4">
-    Work order management coming soon! This feature will allow you to create, manage, and track work orders.
-</MudAlert>
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
 
-<MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/">Back to Dashboard</MudButton>
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudText Typo="Typo.h6" Class="mb-3">Filters</MudText>
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <MudSelect T="WorkOrderStatus?" @bind-Value="_selectedStatus" Label="Status" Clearable="true" AdornmentIcon="@Icons.Material.Filled.FilterList">
+                <MudSelectItem T="WorkOrderStatus?" Value="@((WorkOrderStatus?)null)">All Statuses</MudSelectItem>
+                <MudSelectItem T="WorkOrderStatus?" Value="@WorkOrderStatus.Draft">Draft</MudSelectItem>
+                <MudSelectItem T="WorkOrderStatus?" Value="@WorkOrderStatus.Submitted">Submitted</MudSelectItem>
+                <MudSelectItem T="WorkOrderStatus?" Value="@WorkOrderStatus.Approved">Approved</MudSelectItem>
+                <MudSelectItem T="WorkOrderStatus?" Value="@WorkOrderStatus.Rejected">Rejected</MudSelectItem>
+                <MudSelectItem T="WorkOrderStatus?" Value="@WorkOrderStatus.InProgress">In Progress</MudSelectItem>
+                <MudSelectItem T="WorkOrderStatus?" Value="@WorkOrderStatus.Completed">Completed</MudSelectItem>
+                <MudSelectItem T="WorkOrderStatus?" Value="@WorkOrderStatus.Cancelled">Cancelled</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudSelect T="WorkOrderPriority?" @bind-Value="_selectedPriority" Label="Priority" Clearable="true" AdornmentIcon="@Icons.Material.Filled.PriorityHigh">
+                <MudSelectItem T="WorkOrderPriority?" Value="@((WorkOrderPriority?)null)">All Priorities</MudSelectItem>
+                <MudSelectItem T="WorkOrderPriority?" Value="@WorkOrderPriority.Low">Low</MudSelectItem>
+                <MudSelectItem T="WorkOrderPriority?" Value="@WorkOrderPriority.Medium">Medium</MudSelectItem>
+                <MudSelectItem T="WorkOrderPriority?" Value="@WorkOrderPriority.High">High</MudSelectItem>
+                <MudSelectItem T="WorkOrderPriority?" Value="@WorkOrderPriority.Critical">Critical</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudDatePicker @bind-Date="_fromDate" Label="From Date" Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudDatePicker @bind-Date="_toDate" Label="To Date" Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" md="3" Class="d-flex align-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="ApplyFiltersAsync" FullWidth="true" Disabled="@_isLoading">
+                Apply Filters
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+        <MudText Typo="Typo.h6">Work Order List</MudText>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadDataAsync" Disabled="@_isLoading">
+                Refresh
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NavigateToCreate">
+                Create Work Order
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    <MudTable Items="@_workOrders" Hover="true" Striped="true" Dense="true" Loading="@_isLoading" Filter="new Func<WorkOrderDto,bool>(FilterFunc)">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_searchString" Placeholder="Search work orders..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Order Number</MudTh>
+            <MudTh>Title</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Priority</MudTh>
+            <MudTh>Requested By</MudTh>
+            <MudTh>Assigned To</MudTh>
+            <MudTh>Due Date</MudTh>
+            <MudTh>Items</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Order Number">
+                <MudLink Href="@($"/work-orders/{context.Id}")" Typo="Typo.body2" Class="font-weight-bold">
+                    @context.OrderNumber
+                </MudLink>
+            </MudTd>
+            <MudTd DataLabel="Title">
+                <MudText Typo="Typo.body2">@context.Title</MudText>
+                @if (!string.IsNullOrEmpty(context.Description) && context.Description.Length > 50)
+                {
+                    <MudTooltip Text="@context.Description">
+                        <MudText Typo="Typo.caption">@(context.Description.Substring(0, 47) + "...")</MudText>
+                    </MudTooltip>
+                }
+                else if (!string.IsNullOrEmpty(context.Description))
+                {
+                    <MudText Typo="Typo.caption">@context.Description</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                    @GetStatusDisplay(context.Status)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Priority">
+                <MudChip Size="Size.Small" Color="@GetPriorityColor(context.Priority)" Variant="Variant.Outlined">
+                    @context.Priority.ToString()
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Requested By">
+                <MudText Typo="Typo.body2">@context.RequestedByName</MudText>
+            </MudTd>
+            <MudTd DataLabel="Assigned To">
+                <MudText Typo="Typo.body2">@(context.AssignedToName ?? "-")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Due Date">
+                @if (context.DueDate.HasValue)
+                {
+                    var isOverdue = context.DueDate.Value < DateTime.Now && context.Status != WorkOrderStatus.Completed;
+                    <MudText Typo="Typo.body2" Color="@(isOverdue ? Color.Error : Color.Default)">
+                        @context.DueDate.Value.ToString("yyyy-MM-dd")
+                        @if (isOverdue)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Color="Color.Error" />
+                        }
+                    </MudText>
+                }
+                else
+                {
+                    <MudText>-</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Items">
+                <MudText Typo="Typo.body2">@context.Items.Count item(s)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
+                    <MudMenuItem OnClick="@(() => NavigateToDetails(context.Id))" Icon="@Icons.Material.Filled.Visibility">View Details</MudMenuItem>
+
+                    @if (context.Status == WorkOrderStatus.Draft)
+                    {
+                        <MudMenuItem OnClick="@(() => SubmitWorkOrderAsync(context.Id))" Icon="@Icons.Material.Filled.Send">Submit</MudMenuItem>
+                    }
+
+                    @if (context.Status == WorkOrderStatus.Submitted)
+                    {
+                        <MudMenuItem OnClick="@(() => ShowApproveDialog(context))" Icon="@Icons.Material.Filled.CheckCircle">Approve</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => ShowRejectDialog(context))" Icon="@Icons.Material.Filled.Cancel">Reject</MudMenuItem>
+                    }
+
+                    @if (context.Status == WorkOrderStatus.Approved)
+                    {
+                        <MudMenuItem OnClick="@(() => StartWorkOrderAsync(context.Id))" Icon="@Icons.Material.Filled.PlayArrow">Start</MudMenuItem>
+                    }
+
+                    @if (context.Status == WorkOrderStatus.InProgress)
+                    {
+                        <MudMenuItem OnClick="@(() => CompleteWorkOrderAsync(context.Id))" Icon="@Icons.Material.Filled.DoneAll">Complete</MudMenuItem>
+                    }
+
+                    @if (context.Status != WorkOrderStatus.Completed && context.Status != WorkOrderStatus.Cancelled)
+                    {
+                        <MudDivider />
+                        <MudMenuItem OnClick="@(() => CancelWorkOrderAsync(context.Id))" Icon="@Icons.Material.Filled.Block">Cancel</MudMenuItem>
+                    }
+                </MudMenu>
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 20, 50 }" />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@if (_workOrders.Count == 0 && !_isLoading)
+{
+    <MudAlert Severity="Severity.Info" Class="mt-4">
+        <MudText Typo="Typo.h6">No work orders found</MudText>
+        <MudText>Try adjusting your filters or create your first work order.</MudText>
+    </MudAlert>
+}
+
+@code {
+    private List<WorkOrderDto> _workOrders = new();
+    private bool _isLoading = false;
+    private string _searchString = "";
+
+    // Filters
+    private WorkOrderStatus? _selectedStatus;
+    private WorkOrderPriority? _selectedPriority;
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            var result = await WorkOrderService.GetWorkOrdersAsync(
+                pageNumber: 1,
+                pageSize: 100,
+                status: _selectedStatus,
+                priority: _selectedPriority,
+                fromDate: _fromDate,
+                toDate: _toDate
+            );
+
+            if (result != null)
+            {
+                _workOrders = result.Items;
+                Snackbar.Add($"Loaded {_workOrders.Count} work orders", Severity.Info);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading work orders: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private bool FilterFunc(WorkOrderDto workOrder)
+    {
+        if (string.IsNullOrWhiteSpace(_searchString))
+            return true;
+
+        if (workOrder.OrderNumber.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (workOrder.Title.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (workOrder.Description?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+
+        if (workOrder.RequestedByName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (workOrder.AssignedToName?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+
+        return false;
+    }
+
+    private Color GetStatusColor(WorkOrderStatus status) => status switch
+    {
+        WorkOrderStatus.Draft => Color.Default,
+        WorkOrderStatus.Submitted => Color.Info,
+        WorkOrderStatus.Approved => Color.Primary,
+        WorkOrderStatus.Rejected => Color.Error,
+        WorkOrderStatus.InProgress => Color.Warning,
+        WorkOrderStatus.Completed => Color.Success,
+        WorkOrderStatus.Cancelled => Color.Dark,
+        _ => Color.Default
+    };
+
+    private string GetStatusDisplay(WorkOrderStatus status) => status switch
+    {
+        WorkOrderStatus.InProgress => "In Progress",
+        _ => status.ToString()
+    };
+
+    private Color GetPriorityColor(WorkOrderPriority priority) => priority switch
+    {
+        WorkOrderPriority.Low => Color.Success,
+        WorkOrderPriority.Medium => Color.Info,
+        WorkOrderPriority.High => Color.Warning,
+        WorkOrderPriority.Critical => Color.Error,
+        _ => Color.Default
+    };
+
+    private void NavigateToCreate()
+    {
+        NavigationManager.NavigateTo("/work-orders/create");
+    }
+
+    private void NavigateToDetails(Guid id)
+    {
+        NavigationManager.NavigateTo($"/work-orders/{id}");
+    }
+
+    private async Task SubmitWorkOrderAsync(Guid id)
+    {
+        try
+        {
+            var result = await WorkOrderService.SubmitWorkOrderAsync(id);
+            if (result != null)
+            {
+                Snackbar.Add($"Work order {result.OrderNumber} submitted successfully!", Severity.Success);
+                await LoadDataAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error submitting work order: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void ShowApproveDialog(WorkOrderDto workOrder)
+    {
+        // For now, navigate to details page where approval can be done properly
+        NavigationManager.NavigateTo($"/work-orders/{workOrder.Id}");
+    }
+
+    private void ShowRejectDialog(WorkOrderDto workOrder)
+    {
+        // For now, navigate to details page where rejection can be done properly
+        NavigationManager.NavigateTo($"/work-orders/{workOrder.Id}");
+    }
+
+    private async Task StartWorkOrderAsync(Guid id)
+    {
+        try
+        {
+            var result = await WorkOrderService.StartWorkOrderAsync(id);
+            if (result != null)
+            {
+                Snackbar.Add($"Work order {result.OrderNumber} started!", Severity.Success);
+                await LoadDataAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error starting work order: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task CompleteWorkOrderAsync(Guid id)
+    {
+        try
+        {
+            var result = await WorkOrderService.CompleteWorkOrderAsync(id);
+            if (result != null)
+            {
+                Snackbar.Add($"Work order {result.OrderNumber} completed!", Severity.Success);
+                await LoadDataAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error completing work order: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task CancelWorkOrderAsync(Guid id)
+    {
+        try
+        {
+            var result = await WorkOrderService.CancelWorkOrderAsync(id);
+            if (result != null)
+            {
+                Snackbar.Add($"Work order {result.OrderNumber} cancelled", Severity.Warning);
+                await LoadDataAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error cancelling work order: {ex.Message}", Severity.Error);
+        }
+    }
+}

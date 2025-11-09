@@ -1,0 +1,310 @@
+@page "/work-orders/create"
+@attribute [Authorize]
+@inject WorkOrderService WorkOrderService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+
+<PageTitle>Create Work Order - Inventory Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large">
+    <MudPaper Elevation="2" Class="pa-4">
+        <MudStack Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.h5">Create Work Order</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="NavigateBack" />
+            </MudStack>
+
+            @if (_isLoading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+
+            <MudForm @ref="_form" @bind-IsValid="@_formIsValid">
+                <MudGrid>
+                    <!-- Title -->
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Title" Label="Title" Required="true" RequiredError="Title is required" Variant="Variant.Outlined" />
+                    </MudItem>
+
+                    <!-- Description -->
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Description" Label="Description" Lines="3" Variant="Variant.Outlined" />
+                    </MudItem>
+
+                    <!-- Priority -->
+                    <MudItem xs="12" md="6">
+                        <MudSelect T="WorkOrderPriority" @bind-Value="_model.Priority" Label="Priority" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.PriorityHigh">
+                            <MudSelectItem T="WorkOrderPriority" Value="@WorkOrderPriority.Low">
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Success" Size="Size.Small" />
+                                    <MudText>Low</MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                            <MudSelectItem T="WorkOrderPriority" Value="@WorkOrderPriority.Medium">
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Info" Size="Size.Small" />
+                                    <MudText>Medium</MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                            <MudSelectItem T="WorkOrderPriority" Value="@WorkOrderPriority.High">
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Warning" Size="Size.Small" />
+                                    <MudText>High</MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                            <MudSelectItem T="WorkOrderPriority" Value="@WorkOrderPriority.Critical">
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.PriorityHigh" Color="Color.Error" Size="Size.Small" />
+                                    <MudText>Critical</MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+
+                    <!-- Due Date -->
+                    <MudItem xs="12" md="6">
+                        <MudDatePicker @bind-Date="_model.DueDate" Label="Due Date" Variant="Variant.Outlined" MinDate="DateTime.Today" />
+                    </MudItem>
+                </MudGrid>
+            </MudForm>
+
+            <MudDivider />
+
+            <!-- Line Items -->
+            <MudText Typo="Typo.h6">Line Items</MudText>
+
+            @if (_model.Items.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info">
+                    No items added yet. Add at least one item to create the work order.
+                </MudAlert>
+            }
+            else
+            {
+                <MudTable Items="@_model.Items" Hover="true" Dense="true" Striped="true">
+                    <HeaderContent>
+                        <MudTh>Product</MudTh>
+                        <MudTh>Quantity Requested</MudTh>
+                        <MudTh>Notes</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Product">
+                            @{
+                                var product = _products.FirstOrDefault(p => p.Id == context.ProductId);
+                            }
+                            @if (product != null)
+                            {
+                                <MudText Class="font-weight-bold">@product.SKU</MudText>
+                                <MudText Typo="Typo.caption">@product.Name</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Quantity">
+                            @context.QuantityRequested
+                        </MudTd>
+                        <MudTd DataLabel="Notes">
+                            @(context.Notes ?? "-")
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => RemoveItem(context))" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+
+            <!-- Add Item Form -->
+            <MudPaper Elevation="1" Class="pa-3" Style="background-color: #f5f5f5;">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Add Item</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="5">
+                        <MudSelect T="Guid?" @bind-Value="_newItemProductId" Label="Product" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.Inventory2">
+                            @foreach (var product in _products)
+                            {
+                                <MudSelectItem T="Guid?" Value="@product.Id">
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                        <MudText>@product.SKU - @product.Name</MudText>
+                                        <MudChip Size="Size.Small" Color="@(product.IsLowStock ? Color.Warning : Color.Success)">
+                                            Stock: @product.CurrentStock
+                                        </MudChip>
+                                    </MudStack>
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudNumericField @bind-Value="_newItemQuantity" Label="Quantity" Min="1" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudTextField @bind-Value="_newItemNotes" Label="Notes (Optional)" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="1" Class="d-flex align-end">
+                        <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled" OnClick="AddItem" Disabled="!_newItemProductId.HasValue || _newItemQuantity <= 0" />
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            <MudDivider />
+
+            <!-- Actions -->
+            <MudStack Row="true" Spacing="2" Justify="Justify.End">
+                <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="NavigateBack" Disabled="@_isSubmitting">
+                    Cancel
+                </MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SubmitAsync" Disabled="@(!_formIsValid || _model.Items.Count == 0 || _isSubmitting)" StartIcon="@Icons.Material.Filled.Save">
+                    @if (_isSubmitting)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        <MudText Class="ml-2">Creating...</MudText>
+                    }
+                    else
+                    {
+                        <MudText>Create Work Order</MudText>
+                    }
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm? _form;
+    private bool _formIsValid;
+    private bool _isLoading = false;
+    private bool _isSubmitting = false;
+    private List<ProductDto> _products = new();
+
+    private CreateWorkOrderRequest _model = new()
+    {
+        Priority = WorkOrderPriority.Medium
+    };
+
+    // Add item form fields
+    private Guid? _newItemProductId;
+    private int _newItemQuantity = 1;
+    private string? _newItemNotes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProductsAsync();
+    }
+
+    private async Task LoadProductsAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            // Note: This requires ProductService which might not exist yet
+            // For now, this is a placeholder - you'd need to implement ProductService.GetProductsAsync
+            // var result = await ProductService.GetProductsAsync(1, 1000);
+            // if (result != null)
+            // {
+            //     _products = result.Items.OrderBy(p => p.SKU).ToList();
+            // }
+
+            // Placeholder: Empty list for now
+            _products = new List<ProductDto>();
+            Snackbar.Add("Note: Product loading not yet implemented", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading products: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void AddItem()
+    {
+        if (!_newItemProductId.HasValue || _newItemQuantity <= 0)
+        {
+            Snackbar.Add("Please select a product and enter a valid quantity", Severity.Warning);
+            return;
+        }
+
+        // Check if product already exists in items
+        if (_model.Items.Any(i => i.ProductId == _newItemProductId.Value))
+        {
+            Snackbar.Add("This product is already in the list. Remove it first to add again.", Severity.Warning);
+            return;
+        }
+
+        _model.Items.Add(new CreateWorkOrderItemRequest
+        {
+            ProductId = _newItemProductId.Value,
+            QuantityRequested = _newItemQuantity,
+            Notes = _newItemNotes
+        });
+
+        // Reset form
+        _newItemProductId = null;
+        _newItemQuantity = 1;
+        _newItemNotes = null;
+
+        Snackbar.Add("Item added", Severity.Success);
+    }
+
+    private void RemoveItem(CreateWorkOrderItemRequest item)
+    {
+        _model.Items.Remove(item);
+        Snackbar.Add("Item removed", Severity.Info);
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_form == null || !_formIsValid)
+        {
+            Snackbar.Add("Please fill in all required fields", Severity.Warning);
+            return;
+        }
+
+        if (_model.Items.Count == 0)
+        {
+            Snackbar.Add("Please add at least one item", Severity.Warning);
+            return;
+        }
+
+        _isSubmitting = true;
+
+        try
+        {
+            var result = await WorkOrderService.CreateWorkOrderAsync(_model);
+
+            if (result != null)
+            {
+                Snackbar.Add($"Work order {result.OrderNumber} created successfully!", Severity.Success);
+                NavigationManager.NavigateTo($"/work-orders/{result.Id}");
+            }
+            else
+            {
+                Snackbar.Add("Failed to create work order", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error creating work order: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private void NavigateBack()
+    {
+        NavigationManager.NavigateTo("/work-orders");
+    }
+}
+
+// Placeholder ProductDto for now
+public class ProductDto
+{
+    public Guid Id { get; set; }
+    public string SKU { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public int CurrentStock { get; set; }
+    public int ReorderPoint { get; set; }
+    public bool IsLowStock => CurrentStock <= ReorderPoint;
+}

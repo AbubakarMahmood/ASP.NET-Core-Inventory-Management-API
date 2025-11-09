@@ -1,0 +1,73 @@
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_presetName"
+                      Label="Preset Name"
+                      Variant="Variant.Outlined"
+                      Required="true"
+                      HelperText="Enter a name for this filter preset" />
+
+        <MudCheckBox @bind-Checked="_isDefault"
+                     Label="Set as default"
+                     Color="Color.Primary"
+                     Class="mt-3"
+                     Dense="true">
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                This preset will be automatically loaded when you visit this page
+            </MudText>
+        </MudCheckBox>
+
+        <MudCheckBox @bind-Checked="_isShared"
+                     Label="Share with other users"
+                     Color="Color.Primary"
+                     Dense="true">
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Other users will be able to view and use this preset
+            </MudText>
+        </MudCheckBox>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public string PresetName { get; set; } = "";
+    [Parameter] public bool IsDefault { get; set; } = false;
+    [Parameter] public bool IsShared { get; set; } = false;
+
+    private string _presetName = "";
+    private bool _isDefault = false;
+    private bool _isShared = false;
+
+    protected override void OnInitialized()
+    {
+        _presetName = PresetName;
+        _isDefault = IsDefault;
+        _isShared = IsShared;
+    }
+
+    private void Submit()
+    {
+        if (string.IsNullOrWhiteSpace(_presetName))
+        {
+            Snackbar.Add("Preset name is required", Severity.Warning);
+            return;
+        }
+
+        var data = new Dictionary<string, object>
+        {
+            ["Name"] = _presetName,
+            ["IsDefault"] = _isDefault,
+            ["IsShared"] = _isShared
+        };
+
+        MudDialog.Close(DialogResult.Ok(data));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

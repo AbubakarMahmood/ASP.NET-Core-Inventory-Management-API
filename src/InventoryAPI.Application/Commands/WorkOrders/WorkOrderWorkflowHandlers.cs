@@ -1,5 +1,6 @@
 using AutoMapper;
 using InventoryAPI.Application.DTOs;
+using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Domain.Entities;
 using InventoryAPI.Domain.Enums;
 using InventoryAPI.Infrastructure.Interfaces;
@@ -14,11 +15,13 @@ public class SubmitWorkOrderCommandHandler : IRequestHandler<SubmitWorkOrderComm
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
+    private readonly INotificationService _notificationService;
 
-    public SubmitWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper _mapper)
+    public SubmitWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
-        this._mapper = _mapper;
+        _mapper = mapper;
+        _notificationService = notificationService;
     }
 
     public async Task<WorkOrderDto> Handle(SubmitWorkOrderCommand request, CancellationToken cancellationToken)
@@ -30,6 +33,12 @@ public class SubmitWorkOrderCommandHandler : IRequestHandler<SubmitWorkOrderComm
 
         _unitOfWork.WorkOrders.Update(workOrder);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Send real-time notification
+        await _notificationService.SendWorkOrderNotificationAsync(
+            workOrder.OrderNumber,
+            "Submitted",
+            $"Work order {workOrder.OrderNumber} has been submitted for approval");
 
         return await MapToDto(workOrder, cancellationToken);
     }
@@ -79,11 +88,13 @@ public class ApproveWorkOrderCommandHandler : IRequestHandler<ApproveWorkOrderCo
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
+    private readonly INotificationService _notificationService;
 
-    public ApproveWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper)
+    public ApproveWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
         _mapper = mapper;
+        _notificationService = notificationService;
     }
 
     public async Task<WorkOrderDto> Handle(ApproveWorkOrderCommand request, CancellationToken cancellationToken)
@@ -99,6 +110,12 @@ public class ApproveWorkOrderCommandHandler : IRequestHandler<ApproveWorkOrderCo
 
         _unitOfWork.WorkOrders.Update(workOrder);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Send real-time notification
+        await _notificationService.SendWorkOrderNotificationAsync(
+            workOrder.OrderNumber,
+            "Approved",
+            $"Work order {workOrder.OrderNumber} has been approved and assigned to {assignedUser.FullName}");
 
         return await MapToDto(workOrder, cancellationToken);
     }
@@ -148,11 +165,13 @@ public class RejectWorkOrderCommandHandler : IRequestHandler<RejectWorkOrderComm
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
+    private readonly INotificationService _notificationService;
 
-    public RejectWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper)
+    public RejectWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
         _mapper = mapper;
+        _notificationService = notificationService;
     }
 
     public async Task<WorkOrderDto> Handle(RejectWorkOrderCommand request, CancellationToken cancellationToken)
@@ -164,6 +183,12 @@ public class RejectWorkOrderCommandHandler : IRequestHandler<RejectWorkOrderComm
 
         _unitOfWork.WorkOrders.Update(workOrder);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Send real-time notification
+        await _notificationService.SendWorkOrderNotificationAsync(
+            workOrder.OrderNumber,
+            "Rejected",
+            $"Work order {workOrder.OrderNumber} has been rejected");
 
         return await MapToDto(workOrder, cancellationToken);
     }
@@ -206,11 +231,13 @@ public class StartWorkOrderCommandHandler : IRequestHandler<StartWorkOrderComman
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
+    private readonly INotificationService _notificationService;
 
-    public StartWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper)
+    public StartWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
         _mapper = mapper;
+        _notificationService = notificationService;
     }
 
     public async Task<WorkOrderDto> Handle(StartWorkOrderCommand request, CancellationToken cancellationToken)
@@ -222,6 +249,8 @@ public class StartWorkOrderCommandHandler : IRequestHandler<StartWorkOrderComman
 
         _unitOfWork.WorkOrders.Update(workOrder);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _notificationService.SendWorkOrderNotificationAsync(workOrder.OrderNumber, "Started", $"Work order {workOrder.OrderNumber} is now in progress");
 
         return await MapToDto(workOrder, cancellationToken);
     }
@@ -271,11 +300,13 @@ public class CompleteWorkOrderCommandHandler : IRequestHandler<CompleteWorkOrder
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
+    private readonly INotificationService _notificationService;
 
-    public CompleteWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper)
+    public CompleteWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
         _mapper = mapper;
+        _notificationService = notificationService;
     }
 
     public async Task<WorkOrderDto> Handle(CompleteWorkOrderCommand request, CancellationToken cancellationToken)
@@ -287,6 +318,8 @@ public class CompleteWorkOrderCommandHandler : IRequestHandler<CompleteWorkOrder
 
         _unitOfWork.WorkOrders.Update(workOrder);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _notificationService.SendWorkOrderNotificationAsync(workOrder.OrderNumber, "Completed", $"Work order {workOrder.OrderNumber} has been completed");
 
         return await MapToDto(workOrder, cancellationToken);
     }
@@ -336,11 +369,13 @@ public class CancelWorkOrderCommandHandler : IRequestHandler<CancelWorkOrderComm
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
+    private readonly INotificationService _notificationService;
 
-    public CancelWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper)
+    public CancelWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
         _mapper = mapper;
+        _notificationService = notificationService;
     }
 
     public async Task<WorkOrderDto> Handle(CancelWorkOrderCommand request, CancellationToken cancellationToken)
@@ -352,6 +387,8 @@ public class CancelWorkOrderCommandHandler : IRequestHandler<CancelWorkOrderComm
 
         _unitOfWork.WorkOrders.Update(workOrder);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _notificationService.SendWorkOrderNotificationAsync(workOrder.OrderNumber, "Cancelled", $"Work order {workOrder.OrderNumber} has been cancelled");
 
         return await MapToDto(workOrder, cancellationToken);
     }

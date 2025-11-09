@@ -21,12 +21,14 @@ public class WorkOrdersController : ControllerBase
     private readonly IMediator _mediator;
     private readonly ILogger<WorkOrdersController> _logger;
     private readonly IExcelExportService _excelExportService;
+    private readonly IPdfExportService _pdfExportService;
 
-    public WorkOrdersController(IMediator mediator, ILogger<WorkOrdersController> logger, IExcelExportService excelExportService)
+    public WorkOrdersController(IMediator mediator, ILogger<WorkOrdersController> logger, IExcelExportService excelExportService, IPdfExportService pdfExportService)
     {
         _mediator = mediator;
         _logger = logger;
         _excelExportService = excelExportService;
+        _pdfExportService = pdfExportService;
     }
 
     /// <summary>
@@ -319,6 +321,47 @@ public class WorkOrdersController : ControllerBase
 
         return File(excelData, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             $"WorkOrders_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
+    }
+
+    /// <summary>
+    /// Export work orders to PDF
+    /// </summary>
+    [HttpGet("export/pdf")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ExportWorkOrdersToPdf(
+        [FromQuery] WorkOrderStatus? status = null,
+        [FromQuery] WorkOrderPriority? priority = null,
+        [FromQuery] Guid? assignedToId = null,
+        [FromQuery] Guid? requestedById = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Exporting work orders to PDF");
+
+        // Fetch all work orders without pagination
+        var query = new GetWorkOrdersQuery
+        {
+            PageNumber = 1,
+            PageSize = int.MaxValue,
+            Status = status,
+            Priority = priority,
+            AssignedToId = assignedToId,
+            RequestedById = requestedById,
+            FromDate = fromDate,
+            ToDate = toDate
+        };
+
+        var result = await _mediator.Send(query, cancellationToken);
+
+        // Generate PDF file
+        var pdfData = _pdfExportService.ExportToPdf(result.Items, "Work Orders Report");
+
+        _logger.LogInformation("Exported {Count} work orders to PDF", result.Items.Count);
+
+        return File(pdfData, "application/pdf",
+            $"WorkOrders_{DateTime.UtcNow:yyyyMMddHHmmss}.pdf");
     }
 }
 

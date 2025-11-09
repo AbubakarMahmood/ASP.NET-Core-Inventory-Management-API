@@ -46,6 +46,7 @@ builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
+builder.Services.AddScoped<IPdfExportService, PdfExportService>();
 builder.Services.AddSingleton<INotificationService, NotificationService>();
 
 // AutoMapper

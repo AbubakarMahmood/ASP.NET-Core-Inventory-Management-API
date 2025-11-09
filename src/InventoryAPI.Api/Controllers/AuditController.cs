@@ -19,12 +19,14 @@ public class AuditController : ControllerBase
     private readonly IMediator _mediator;
     private readonly ILogger<AuditController> _logger;
     private readonly IExcelExportService _excelExportService;
+    private readonly IPdfExportService _pdfExportService;
 
-    public AuditController(IMediator mediator, ILogger<AuditController> logger, IExcelExportService excelExportService)
+    public AuditController(IMediator mediator, ILogger<AuditController> logger, IExcelExportService excelExportService, IPdfExportService pdfExportService)
     {
         _mediator = mediator;
         _logger = logger;
         _excelExportService = excelExportService;
+        _pdfExportService = pdfExportService;
     }
 
     /// <summary>
@@ -112,5 +114,45 @@ public class AuditController : ControllerBase
 
         return File(excelData, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             $"AuditLogs_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
+    }
+
+    /// <summary>
+    /// Export audit logs to PDF
+    /// </summary>
+    [HttpGet("export/pdf")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ExportAuditLogsToPdf(
+        [FromQuery] string? entityType = null,
+        [FromQuery] string? action = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] string? performedBy = null,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Exporting audit logs to PDF");
+
+        // Fetch all audit logs without pagination
+        var query = new GetAuditLogsQuery
+        {
+            PageNumber = 1,
+            PageSize = int.MaxValue,
+            EntityType = entityType,
+            Action = action,
+            FromDate = fromDate,
+            ToDate = toDate,
+            PerformedBy = performedBy
+        };
+
+        var result = await _mediator.Send(query, cancellationToken);
+
+        // Generate PDF file
+        var pdfData = _pdfExportService.ExportToPdf(result.Items, "Audit Logs Report");
+
+        _logger.LogInformation("Exported {Count} audit logs to PDF", result.Items.Count);
+
+        return File(pdfData, "application/pdf",
+            $"AuditLogs_{DateTime.UtcNow:yyyyMMddHHmmss}.pdf");
     }
 }

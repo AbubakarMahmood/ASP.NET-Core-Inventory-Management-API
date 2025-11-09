@@ -60,16 +60,10 @@
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadDataAsync" Disabled="@_isLoading">
                 Refresh
             </MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Info" OnClick="ExportToExcelAsync" StartIcon="@Icons.Material.Filled.Download" Disabled="@_isExporting">
-                @if (_isExporting)
-                {
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                }
-                else
-                {
-                    <span>Export</span>
-                }
-            </MudButton>
+            <MudMenu Label="Export" Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Download" Disabled="@_isExporting">
+                <MudMenuItem OnClick="ExportToExcelAsync" Icon="@Icons.Material.Filled.GridOn">Export to Excel</MudMenuItem>
+                <MudMenuItem OnClick="ExportToPdfAsync" Icon="@Icons.Material.Filled.PictureAsPdf">Export to PDF</MudMenuItem>
+            </MudMenu>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NavigateToCreate">
                 Create Work Order
             </MudButton>
@@ -425,6 +419,52 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Error exporting work orders: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isExporting = false;
+        }
+    }
+
+    private async Task ExportToPdfAsync()
+    {
+        _isExporting = true;
+
+        try
+        {
+            var queryParams = new List<string>();
+
+            if (_selectedStatus.HasValue)
+                queryParams.Add($"status={_selectedStatus.Value}");
+
+            if (_selectedPriority.HasValue)
+                queryParams.Add($"priority={_selectedPriority.Value}");
+
+            if (_fromDate.HasValue)
+                queryParams.Add($"fromDate={Uri.EscapeDataString(_fromDate.Value.ToString("yyyy-MM-dd"))}");
+
+            if (_toDate.HasValue)
+                queryParams.Add($"toDate={Uri.EscapeDataString(_toDate.Value.ToString("yyyy-MM-dd"))}");
+
+            var query = queryParams.Any() ? $"?{string.Join("&", queryParams)}" : "";
+            var response = await HttpClient.GetAsync($"api/v1/workorders/export/pdf{query}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var fileBytes = await response.Content.ReadAsByteArrayAsync();
+                var fileName = $"WorkOrders_{DateTime.Now:yyyyMMddHHmmss}.pdf";
+
+                await JSRuntime.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(fileBytes));
+                Snackbar.Add("Work orders exported to PDF successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to export work orders to PDF", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error exporting work orders to PDF: {ex.Message}", Severity.Error);
         }
         finally
         {

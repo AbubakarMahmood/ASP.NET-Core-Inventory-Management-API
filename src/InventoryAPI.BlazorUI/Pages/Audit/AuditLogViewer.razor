@@ -65,16 +65,10 @@
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadDataAsync" Disabled="@_isLoading">
                 Refresh
             </MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Info" OnClick="ExportToExcelAsync" StartIcon="@Icons.Material.Filled.Download" Disabled="@_isExporting">
-                @if (_isExporting)
-                {
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                }
-                else
-                {
-                    <span>Export</span>
-                }
-            </MudButton>
+            <MudMenu Label="Export" Variant="Variant.Outlined" Color="Color.Info" StartIcon="@Icons.Material.Filled.Download" Disabled="@_isExporting">
+                <MudMenuItem OnClick="ExportToExcelAsync" Icon="@Icons.Material.Filled.GridOn">Export to Excel</MudMenuItem>
+                <MudMenuItem OnClick="ExportToPdfAsync" Icon="@Icons.Material.Filled.PictureAsPdf">Export to PDF</MudMenuItem>
+            </MudMenu>
         </MudStack>
     </MudStack>
 
@@ -258,6 +252,55 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Error exporting audit logs: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isExporting = false;
+        }
+    }
+
+    private async Task ExportToPdfAsync()
+    {
+        _isExporting = true;
+
+        try
+        {
+            var queryParams = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(_selectedEntityType))
+                queryParams.Add($"entityType={Uri.EscapeDataString(_selectedEntityType)}");
+
+            if (!string.IsNullOrWhiteSpace(_selectedAction))
+                queryParams.Add($"action={Uri.EscapeDataString(_selectedAction)}");
+
+            if (_fromDate.HasValue)
+                queryParams.Add($"fromDate={Uri.EscapeDataString(_fromDate.Value.ToString("yyyy-MM-dd"))}");
+
+            if (_toDate.HasValue)
+                queryParams.Add($"toDate={Uri.EscapeDataString(_toDate.Value.ToString("yyyy-MM-dd"))}");
+
+            if (!string.IsNullOrWhiteSpace(_performedByFilter))
+                queryParams.Add($"performedBy={Uri.EscapeDataString(_performedByFilter)}");
+
+            var query = queryParams.Any() ? $"?{string.Join("&", queryParams)}" : "";
+            var response = await HttpClient.GetAsync($"api/v1/audit/export/pdf{query}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var fileBytes = await response.Content.ReadAsByteArrayAsync();
+                var fileName = $"AuditLogs_{DateTime.Now:yyyyMMddHHmmss}.pdf";
+
+                await JSRuntime.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(fileBytes));
+                Snackbar.Add("Audit logs exported to PDF successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to export audit logs to PDF", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error exporting audit logs to PDF: {ex.Message}", Severity.Error);
         }
         finally
         {

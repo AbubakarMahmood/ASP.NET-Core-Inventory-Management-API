@@ -34,5 +34,9 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.CurrentStock, opt => opt.Ignore());
 
         CreateMap<CreateWorkOrderCommand, WorkOrder>();
+
+        // User mappings
+        CreateMap<User, UserDto>()
+            .ForMember(dest => dest.FullName, opt => opt.MapFrom(src => src.FullName));
     }
 }

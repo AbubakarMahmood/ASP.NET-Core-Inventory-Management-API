@@ -1,5 +1,6 @@
 using AutoMapper;
 using InventoryAPI.Application.Commands.Products;
+using InventoryAPI.Application.Commands.StockMovements;
 using InventoryAPI.Application.DTOs;
 using InventoryAPI.Domain.Entities;
 
@@ -17,7 +18,15 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.IsLowStock, opt => opt.MapFrom(src => src.IsLowStock()));
 
         CreateMap<CreateProductCommand, Product>();
+        
+        // StockMovement mappings
+        CreateMap<StockMovement, StockMovementDto>()
+            .ForMember(dest => dest.ProductSKU, opt => opt.Ignore())
+            .ForMember(dest => dest.ProductName, opt => opt.Ignore())
+            .ForMember(dest => dest.PerformedByName, opt => opt.Ignore())
+            .ForMember(dest => dest.WorkOrderNumber, opt => opt.Ignore());
 
+        CreateMap<RecordStockMovementCommand, StockMovement>();
         // Add more mappings as needed
     }
 }

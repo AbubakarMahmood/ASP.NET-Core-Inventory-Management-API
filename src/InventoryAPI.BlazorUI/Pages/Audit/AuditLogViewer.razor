@@ -1,0 +1,203 @@
+@page "/audit"
+@attribute [Authorize(Roles = "Admin,Manager")]
+@inject AuditService AuditService
+@inject ISnackbar Snackbar
+
+<PageTitle>Audit Log - Inventory Management</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Audit Log</MudText>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudText Typo="Typo.h6" Class="mb-3">Filters</MudText>
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <MudSelect T="string?" @bind-Value="_selectedEntityType" Label="Entity Type" Clearable="true" AdornmentIcon="@Icons.Material.Filled.Category">
+                <MudSelectItem T="string?" Value="@((string?)null)">All Types</MudSelectItem>
+                <MudSelectItem T="string?" Value="@("Product")">Product</MudSelectItem>
+                <MudSelectItem T="string?" Value="@("WorkOrder")">Work Order</MudSelectItem>
+                <MudSelectItem T="string?" Value="@("User")">User</MudSelectItem>
+                <MudSelectItem T="string?" Value="@("StockMovement")">Stock Movement</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudSelect T="string?" @bind-Value="_selectedAction" Label="Action" Clearable="true" AdornmentIcon="@Icons.Material.Filled.Event">
+                <MudSelectItem T="string?" Value="@((string?)null)">All Actions</MudSelectItem>
+                <MudSelectItem T="string?" Value="@("Created")">Created</MudSelectItem>
+                <MudSelectItem T="string?" Value="@("Modified")">Modified</MudSelectItem>
+                <MudSelectItem T="string?" Value="@("Deleted")">Deleted</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudDatePicker @bind-Date="_fromDate" Label="From Date" Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudDatePicker @bind-Date="_toDate" Label="To Date" Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" md="2" Class="d-flex align-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="ApplyFiltersAsync" FullWidth="true" Disabled="@_isLoading">
+                Apply Filters
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" md="6">
+            <MudTextField @bind-Value="_performedByFilter" Label="Performed By" Placeholder="Search by user..." Clearable="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Person" />
+        </MudItem>
+        <MudItem xs="12" md="6" Class="d-flex align-end justify-end">
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Clear" OnClick="ClearFiltersAsync" Disabled="@_isLoading">
+                Clear Filters
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+        <MudText Typo="Typo.h6">Audit Entries (@_totalCount)</MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadDataAsync" Disabled="@_isLoading">
+            Refresh
+        </MudButton>
+    </MudStack>
+
+    <MudTable Items="@_auditLogs" Hover="true" Striped="true" Dense="true" Loading="@_isLoading">
+        <HeaderContent>
+            <MudTh>Timestamp</MudTh>
+            <MudTh>Entity Type</MudTh>
+            <MudTh>Entity</MudTh>
+            <MudTh>Action</MudTh>
+            <MudTh>Performed By</MudTh>
+            <MudTh>Details</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Timestamp">
+                <MudText Typo="Typo.body2">@context.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Entity Type">
+                <MudChip Size="Size.Small" Color="@GetEntityTypeColor(context.EntityType)">
+                    @context.EntityType
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Entity">
+                <MudText Typo="Typo.body2" Class="font-weight-bold">@context.EntityIdentifier</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.EntityId.ToString().Substring(0, 8)...</MudText>
+            </MudTd>
+            <MudTd DataLabel="Action">
+                <MudChip Size="Size.Small" Color="@GetActionColor(context.Action)" Variant="Variant.Outlined">
+                    @context.Action
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Performed By">
+                <MudText Typo="Typo.body2">@context.PerformedBy</MudText>
+            </MudTd>
+            <MudTd DataLabel="Details">
+                @if (!string.IsNullOrWhiteSpace(context.Details))
+                {
+                    <MudText Typo="Typo.body2">@context.Details</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">-</MudText>
+                }
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@if (_auditLogs.Count == 0 && !_isLoading)
+{
+    <MudAlert Severity="Severity.Info" Class="mt-4">
+        <MudText Typo="Typo.h6">No audit logs found</MudText>
+        <MudText>Try adjusting your filters to see more results.</MudText>
+    </MudAlert>
+}
+
+@code {
+    private List<AuditLogDto> _auditLogs = new();
+    private bool _isLoading = false;
+    private int _totalCount = 0;
+
+    // Filters
+    private string? _selectedEntityType;
+    private string? _selectedAction;
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+    private string? _performedByFilter;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            var result = await AuditService.GetAuditLogsAsync(
+                pageNumber: 1,
+                pageSize: 100,
+                entityType: _selectedEntityType,
+                action: _selectedAction,
+                fromDate: _fromDate,
+                toDate: _toDate,
+                performedBy: _performedByFilter
+            );
+
+            if (result != null)
+            {
+                _auditLogs = result.Items;
+                _totalCount = result.TotalCount;
+                Snackbar.Add($"Loaded {_auditLogs.Count} audit entries", Severity.Info);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading audit logs: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _selectedEntityType = null;
+        _selectedAction = null;
+        _fromDate = null;
+        _toDate = null;
+        _performedByFilter = null;
+        await LoadDataAsync();
+    }
+
+    private Color GetEntityTypeColor(string entityType) => entityType switch
+    {
+        "Product" => Color.Primary,
+        "WorkOrder" => Color.Info,
+        "User" => Color.Secondary,
+        "StockMovement" => Color.Success,
+        _ => Color.Default
+    };
+
+    private Color GetActionColor(string action) => action switch
+    {
+        "Created" => Color.Success,
+        "Modified" => Color.Info,
+        "Deleted" => Color.Error,
+        _ => Color.Default
+    };
+}

@@ -1,0 +1,245 @@
+@page "/users/create"
+@page "/users/edit/{Id:guid}"
+@attribute [Authorize(Roles = "Admin")]
+@inject UserService UserService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(_isEditMode ? "Edit User" : "Create User") - Inventory Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium">
+    <MudPaper Elevation="2" Class="pa-4">
+        <MudStack Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.h5">@(_isEditMode ? "Edit User" : "Create New User")</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="NavigateBack" />
+            </MudStack>
+
+            @if (_isLoading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+
+            <MudForm @ref="_form" @bind-IsValid="@_formIsValid">
+                <MudGrid>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_email" Label="Email" Required="true" RequiredError="Email is required" Variant="Variant.Outlined" InputType="InputType.Email" AdornmentIcon="@Icons.Material.Filled.Email" Adornment="Adornment.Start" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_firstName" Label="First Name" Required="true" RequiredError="First name is required" Variant="Variant.Outlined" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_lastName" Label="Last Name" Required="true" RequiredError="Last name is required" Variant="Variant.Outlined" />
+                    </MudItem>
+
+                    @if (!_isEditMode)
+                    {
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="_password" Label="Password" Required="true" RequiredError="Password is required" Variant="Variant.Outlined" InputType="@_passwordInputType" Adornment="Adornment.End" AdornmentIcon="@_passwordIcon" OnAdornmentClick="TogglePasswordVisibility" />
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="_confirmPassword" Label="Confirm Password" Required="true" RequiredError="Please confirm password" Variant="Variant.Outlined" InputType="@_passwordInputType" />
+                        </MudItem>
+                    }
+
+                    <MudItem xs="12" md="6">
+                        <MudSelect T="UserRole" @bind-Value="_role" Label="Role" Required="true" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.Badge" Adornment="Adornment.Start">
+                            <MudSelectItem T="UserRole" Value="@UserRole.Operator">
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Info" Size="Size.Small" />
+                                    <MudText>Operator</MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                            <MudSelectItem T="UserRole" Value="@UserRole.Manager">
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.ManageAccounts" Color="Color.Primary" Size="Size.Small" />
+                                    <MudText>Manager</MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                            <MudSelectItem T="UserRole" Value="@UserRole.Admin">
+                                <MudStack Row="true" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Color="Color.Error" Size="Size.Small" />
+                                    <MudText>Admin</MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudSwitch @bind-Checked="_isActive" Label="Active" Color="Color.Success" />
+                    </MudItem>
+                </MudGrid>
+            </MudForm>
+
+            <MudStack Row="true" Spacing="2" Justify="Justify.End">
+                <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="NavigateBack" Disabled="@_isSubmitting">
+                    Cancel
+                </MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SubmitAsync" Disabled="@(!_formIsValid || _isSubmitting)" StartIcon="@Icons.Material.Filled.Save">
+                    @if (_isSubmitting)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        <MudText Class="ml-2">Saving...</MudText>
+                    }
+                    else
+                    {
+                        <MudText>@(_isEditMode ? "Update User" : "Create User")</MudText>
+                    }
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    [Parameter]
+    public Guid? Id { get; set; }
+
+    private MudForm? _form;
+    private bool _formIsValid;
+    private bool _isLoading = false;
+    private bool _isSubmitting = false;
+    private bool _isEditMode => Id.HasValue;
+
+    // Form fields
+    private string _email = string.Empty;
+    private string _firstName = string.Empty;
+    private string _lastName = string.Empty;
+    private string _password = string.Empty;
+    private string _confirmPassword = string.Empty;
+    private UserRole _role = UserRole.Operator;
+    private bool _isActive = true;
+
+    // Password visibility
+    private bool _showPassword = false;
+    private InputType _passwordInputType = InputType.Password;
+    private string _passwordIcon = Icons.Material.Filled.VisibilityOff;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEditMode && Id.HasValue)
+        {
+            await LoadUserAsync();
+        }
+    }
+
+    private async Task LoadUserAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            var user = await UserService.GetUserByIdAsync(Id!.Value);
+            if (user != null)
+            {
+                _email = user.Email;
+                _firstName = user.FirstName;
+                _lastName = user.LastName;
+                _role = user.Role;
+                _isActive = user.IsActive;
+            }
+            else
+            {
+                Snackbar.Add("User not found", Severity.Error);
+                NavigateBack();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading user: {ex.Message}", Severity.Error);
+            NavigateBack();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void TogglePasswordVisibility()
+    {
+        _showPassword = !_showPassword;
+        _passwordInputType = _showPassword ? InputType.Text : InputType.Password;
+        _passwordIcon = _showPassword ? Icons.Material.Filled.Visibility : Icons.Material.Filled.VisibilityOff;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_form == null || !_formIsValid)
+        {
+            Snackbar.Add("Please fill in all required fields", Severity.Warning);
+            return;
+        }
+
+        if (!_isEditMode && _password != _confirmPassword)
+        {
+            Snackbar.Add("Passwords do not match", Severity.Error);
+            return;
+        }
+
+        if (!_isEditMode && string.IsNullOrWhiteSpace(_password))
+        {
+            Snackbar.Add("Password is required", Severity.Error);
+            return;
+        }
+
+        _isSubmitting = true;
+
+        try
+        {
+            if (_isEditMode && Id.HasValue)
+            {
+                var updateRequest = new UpdateUserRequest
+                {
+                    UserId = Id.Value,
+                    Email = _email,
+                    FirstName = _firstName,
+                    LastName = _lastName,
+                    Role = _role,
+                    IsActive = _isActive
+                };
+
+                var result = await UserService.UpdateUserAsync(Id.Value, updateRequest);
+                if (result != null)
+                {
+                    Snackbar.Add("User updated successfully!", Severity.Success);
+                    NavigationManager.NavigateTo("/users");
+                }
+            }
+            else
+            {
+                var createRequest = new CreateUserRequest
+                {
+                    Email = _email,
+                    Password = _password,
+                    FirstName = _firstName,
+                    LastName = _lastName,
+                    Role = _role,
+                    IsActive = _isActive
+                };
+
+                var result = await UserService.CreateUserAsync(createRequest);
+                if (result != null)
+                {
+                    Snackbar.Add($"User {result.Email} created successfully!", Severity.Success);
+                    NavigationManager.NavigateTo("/users");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving user: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private void NavigateBack()
+    {
+        NavigationManager.NavigateTo("/users");
+    }
+}

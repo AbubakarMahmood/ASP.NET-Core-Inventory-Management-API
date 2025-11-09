@@ -1,121 +1,440 @@
-# ASP.NET-Core-Inventory-Management-API-
-I need you to create a CLAUDE.md file for building a production-grade Inventory Management REST API using ASP.NET Core 8. This should demonstrate enterprise-level patterns and best practices.
+# Inventory Management API
 
-Project Overview:
-Build a comprehensive inventory and work order management system API that could be used by warehouses or maintenance departments. No UI needed - just a robust, well-documented API.
+A production-grade REST API for inventory and work order management built with ASP.NET Core 8. This enterprise-level solution demonstrates modern architectural patterns and best practices for building scalable, maintainable APIs.
 
-Tech Stack:
-- ASP.NET Core 8 (latest LTS)
-- Entity Framework Core 8 with PostgreSQL
-- JWT Authentication with refresh tokens
-- Fluent Validation
-- AutoMapper
-- Serilog for structured logging
-- xUnit + Moq for testing
-- Swagger/OpenAPI documentation
+## 🎯 Overview
 
-Core Domain Entities:
-1. Products/Items
-   - SKU, Name, Description, Category
-   - Current stock level, reorder point, reorder quantity
-   - Unit of measure, cost, location in warehouse
-   
-2. Work Orders
-   - Order number, priority, status workflow
-   - Requested by, assigned to, due date
-   - Items needed (many-to-many with quantities)
-   - Status transitions with business rules
-   
-3. Stock Movements
-   - Type (receipt, issue, adjustment, transfer)
-   - Source/destination locations
-   - Quantity, reason, timestamp
-   - Linked to work orders when applicable
+This API provides comprehensive inventory tracking and work order management capabilities suitable for warehouses, maintenance departments, and supply chain operations. Built with clean architecture principles, it emphasizes separation of concerns, testability, and extensibility.
 
-4. Users & Roles
-   - Admin, Manager, Operator roles
-   - JWT auth with role claims
-   - Audit fields (created by, modified by)
+## ✨ Features
 
-Key Features:
-- CQRS pattern using MediatR for complex operations
-- Repository + Unit of Work patterns
-- Global exception handling middleware
-- Request/response logging middleware
-- Pagination, filtering, and sorting for all GET endpoints
-- Optimistic concurrency control using row versions
-- Soft deletes with global query filters
-- Database migrations and seed data
-- Health checks endpoint
-- API versioning setup
+### Core Functionality
+- **Inventory Management**: Complete CRUD operations for products/items with SKU tracking, stock levels, and warehouse locations
+- **Work Order System**: Full lifecycle management with approval workflows and status transitions
+- **Stock Movement Tracking**: Detailed audit trail for receipts, issues, adjustments, and transfers
+- **User Management**: Role-based access control with Admin, Manager, and Operator roles
+- **Automated Alerts**: Reorder point notifications and low-stock warnings
+- **Reporting**: Low stock reports, pending orders, and variance analysis
 
-Business Logic to Implement:
-1. Automatic reorder alerts when stock falls below reorder point
-2. Work order approval workflow (draft → submitted → approved → in progress → completed)
-3. Stock validation (can't issue more than available)
-4. FIFO/LIFO/Average costing methods for inventory valuation
-5. Stock take/cycle count functionality with variance reporting
+### Technical Features
+- **CQRS Pattern**: Command Query Responsibility Segregation using MediatR
+- **Repository + Unit of Work**: Clean data access abstraction
+- **JWT Authentication**: Secure authentication with refresh token support
+- **API Versioning**: Future-proof API design
+- **Global Exception Handling**: Consistent error responses
+- **Request/Response Logging**: Full observability with Serilog
+- **Optimistic Concurrency**: Row version-based conflict detection
+- **Soft Deletes**: Data preservation with global query filters
+- **Health Checks**: Monitoring and diagnostics endpoints
+- **Pagination & Filtering**: Efficient data retrieval for all collections
 
-API Endpoints Structure:
-/api/v1/auth/login
-/api/v1/auth/refresh
-/api/v1/products (CRUD + bulk operations)
-/api/v1/work-orders (CRUD + status transitions)
-/api/v1/stock-movements (Create + Query)
-/api/v1/reports/low-stock
-/api/v1/reports/pending-orders
-/api/v1/health
+## 🛠️ Tech Stack
 
-Testing Requirements:
-- Unit tests for business logic
-- Integration tests for API endpoints using WebApplicationFactory
-- Test data builders for readable tests
-- Minimum 70% code coverage
+| Category | Technology |
+|----------|-----------|
+| **Framework** | ASP.NET Core 8 (LTS) |
+| **Database** | PostgreSQL with Entity Framework Core 8 |
+| **Authentication** | JWT with refresh tokens |
+| **Validation** | Fluent Validation |
+| **Object Mapping** | AutoMapper |
+| **Logging** | Serilog (structured logging) |
+| **Testing** | xUnit + Moq |
+| **Documentation** | Swagger/OpenAPI 3.0 |
+| **Mediator** | MediatR (CQRS implementation) |
 
-Project Structure:
+## 🏗️ Architecture
+
+This project follows **Clean Architecture** principles with clear separation of concerns:
+
+```
 InventoryAPI/
 ├── src/
-│   ├── InventoryAPI.Api/
-│   │   ├── Controllers/
-│   │   ├── Middleware/
-│   │   ├── Filters/
-│   │   └── Program.cs
-│   ├── InventoryAPI.Application/
-│   │   ├── Commands/
-│   │   ├── Queries/
-│   │   ├── Validators/
-│   │   ├── Mappings/
-│   │   └── Interfaces/
-│   ├── InventoryAPI.Domain/
-│   │   ├── Entities/
-│   │   ├── Enums/
-│   │   └── Exceptions/
-│   └── InventoryAPI.Infrastructure/
-│       ├── Data/
-│       ├── Repositories/
-│       └── Services/
+│   ├── InventoryAPI.Api/              # Presentation Layer
+│   │   ├── Controllers/               # API endpoints
+│   │   ├── Middleware/                # Custom middleware
+│   │   ├── Filters/                   # Action filters
+│   │   └── Program.cs                 # Application entry point
+│   │
+│   ├── InventoryAPI.Application/      # Application Layer
+│   │   ├── Commands/                  # CQRS commands
+│   │   ├── Queries/                   # CQRS queries
+│   │   ├── Validators/                # FluentValidation validators
+│   │   ├── Mappings/                  # AutoMapper profiles
+│   │   └── Interfaces/                # Application contracts
+│   │
+│   ├── InventoryAPI.Domain/           # Domain Layer
+│   │   ├── Entities/                  # Domain models
+│   │   ├── Enums/                     # Enumerations
+│   │   └── Exceptions/                # Domain exceptions
+│   │
+│   └── InventoryAPI.Infrastructure/   # Infrastructure Layer
+│       ├── Data/                      # DbContext, migrations
+│       ├── Repositories/              # Data access implementations
+│       └── Services/                  # External service integrations
+│
 └── tests/
-├── InventoryAPI.UnitTests/
-└── InventoryAPI.IntegrationTests/
+    ├── InventoryAPI.UnitTests/        # Unit tests
+    └── InventoryAPI.IntegrationTests/ # Integration tests
+```
 
-Development Approach:
-1. Start with clean architecture setup
-2. Design database schema with proper indexes
-3. Implement auth first
-4. Build CRUD for products
-5. Add work order workflow
-6. Implement stock movement tracking
-7. Add business rules and validation
-8. Write comprehensive tests
-9. Add performance optimizations (caching, query optimization)
+### Architecture Principles
+- **Dependency Inversion**: Core business logic has no dependencies on external concerns
+- **Single Responsibility**: Each layer has a well-defined purpose
+- **Interface Segregation**: Contracts define clear boundaries between layers
+- **Domain-Driven Design**: Rich domain models with business logic encapsulation
 
-Best Practices to Follow:
-- Use strongly typed IDs (not just int/guid)
-- Implement proper DTOs (no entity exposure)
-- Use IAsyncEnumerable for streaming large datasets
-- Add ETag support for caching
-- Include correlation IDs for request tracking
-- Use database transactions appropriately
-- Implement idempotency for critical operations
+## 🚀 Getting Started
 
-Create a comprehensive CLAUDE.md that guides through building this API step-by-step, with code examples for key patterns, explanations of architectural decisions, and common pitfalls to avoid. Include sample test cases and example API calls.
+### Prerequisites
+
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [PostgreSQL 14+](https://www.postgresql.org/download/)
+- [Docker](https://www.docker.com/get-started) (optional, for containerized PostgreSQL)
+- Your favorite IDE ([Visual Studio 2022](https://visualstudio.microsoft.com/), [VS Code](https://code.visualstudio.com/), or [Rider](https://www.jetbrains.com/rider/))
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/ASP.NET-Core-Inventory-Management-API-.git
+   cd ASP.NET-Core-Inventory-Management-API-
+   ```
+
+2. **Set up PostgreSQL**
+
+   Using Docker:
+   ```bash
+   docker run --name inventory-postgres \
+     -e POSTGRES_DB=inventorydb \
+     -e POSTGRES_USER=inventoryuser \
+     -e POSTGRES_PASSWORD=your_password_here \
+     -p 5432:5432 \
+     -d postgres:14
+   ```
+
+   Or install PostgreSQL locally and create a database.
+
+3. **Configure Connection String**
+
+   Update `appsettings.Development.json` in the `InventoryAPI.Api` project:
+   ```json
+   {
+     "ConnectionStrings": {
+       "DefaultConnection": "Host=localhost;Port=5432;Database=inventorydb;Username=inventoryuser;Password=your_password_here"
+     },
+     "JwtSettings": {
+       "SecretKey": "your-super-secret-key-min-32-characters-long",
+       "Issuer": "InventoryAPI",
+       "Audience": "InventoryAPIUsers",
+       "ExpiryMinutes": 60,
+       "RefreshTokenExpiryDays": 7
+     }
+   }
+   ```
+
+4. **Restore Dependencies**
+   ```bash
+   dotnet restore
+   ```
+
+5. **Apply Database Migrations**
+   ```bash
+   cd src/InventoryAPI.Api
+   dotnet ef database update
+   ```
+
+6. **Run the Application**
+   ```bash
+   dotnet run
+   ```
+
+7. **Access Swagger UI**
+
+   Navigate to: `https://localhost:5001/swagger`
+
+### Quick Start with Seed Data
+
+The application includes seed data for testing:
+- **Admin User**: `admin@inventory.com` / `Admin123!`
+- **Manager User**: `manager@inventory.com` / `Manager123!`
+- **Operator User**: `operator@inventory.com` / `Operator123!`
+
+Sample products and work orders are automatically created on first run.
+
+## 📡 API Endpoints
+
+### Authentication
+```
+POST   /api/v1/auth/login         # Authenticate user
+POST   /api/v1/auth/refresh       # Refresh access token
+POST   /api/v1/auth/register      # Register new user (Admin only)
+```
+
+### Products
+```
+GET    /api/v1/products           # List all products (paginated)
+GET    /api/v1/products/{id}      # Get product by ID
+POST   /api/v1/products           # Create new product
+PUT    /api/v1/products/{id}      # Update product
+DELETE /api/v1/products/{id}      # Soft delete product
+POST   /api/v1/products/bulk      # Bulk create/update products
+```
+
+### Work Orders
+```
+GET    /api/v1/work-orders        # List work orders (paginated)
+GET    /api/v1/work-orders/{id}   # Get work order by ID
+POST   /api/v1/work-orders        # Create work order
+PUT    /api/v1/work-orders/{id}   # Update work order
+DELETE /api/v1/work-orders/{id}   # Cancel work order
+POST   /api/v1/work-orders/{id}/submit    # Submit for approval
+POST   /api/v1/work-orders/{id}/approve   # Approve work order
+POST   /api/v1/work-orders/{id}/start     # Start work order
+POST   /api/v1/work-orders/{id}/complete  # Complete work order
+```
+
+### Stock Movements
+```
+GET    /api/v1/stock-movements    # Query stock movements
+POST   /api/v1/stock-movements    # Record stock movement
+GET    /api/v1/stock-movements/product/{productId}  # Get product history
+```
+
+### Reports
+```
+GET    /api/v1/reports/low-stock         # Products below reorder point
+GET    /api/v1/reports/pending-orders    # Work orders pending action
+GET    /api/v1/reports/stock-valuation   # Inventory valuation report
+GET    /api/v1/reports/movement-summary  # Stock movement summary
+```
+
+### System
+```
+GET    /api/v1/health             # Health check endpoint
+```
+
+## 🔐 Authentication
+
+This API uses JWT (JSON Web Tokens) for authentication.
+
+### Getting a Token
+
+```bash
+curl -X POST https://localhost:5001/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@inventory.com",
+    "password": "Admin123!"
+  }'
+```
+
+Response:
+```json
+{
+  "accessToken": "<issued at runtime>",
+  "refreshToken": "<issued at runtime>",
+  "expiresIn": 3600,
+  "tokenType": "Bearer"
+}
+```
+
+### Using the Token
+
+Include the token in the `Authorization` header:
+
+```bash
+curl -X GET https://localhost:5001/api/v1/products \
+  -H "Authorization: Bearer <token>"
+```
+
+### Role-Based Access
+
+| Role | Permissions |
+|------|-------------|
+| **Admin** | Full access to all endpoints, user management |
+| **Manager** | Approve work orders, manage inventory, view reports |
+| **Operator** | Create work orders, record stock movements, view inventory |
+
+## 🧪 Testing
+
+### Running Tests
+
+```bash
+# Run all tests
+dotnet test
+
+# Run with coverage
+dotnet test /p:CollectCoverage=true /p:CoverageReportsFolder=./coverage
+
+# Run specific test project
+dotnet test tests/InventoryAPI.UnitTests
+dotnet test tests/InventoryAPI.IntegrationTests
+```
+
+### Test Structure
+
+- **Unit Tests**: Test business logic in isolation using Moq for dependencies
+- **Integration Tests**: Test API endpoints using `WebApplicationFactory` with in-memory database
+- **Test Data Builders**: Fluent builders for creating test data
+- **Coverage Target**: Minimum 70% code coverage
+
+Example test:
+```csharp
+[Fact]
+public async Task CreateProduct_WithValidData_ReturnsCreatedProduct()
+{
+    // Arrange
+    var command = new CreateProductCommandBuilder()
+        .WithSku("TEST-001")
+        .WithName("Test Product")
+        .WithStockLevel(100)
+        .Build();
+
+    // Act
+    var result = await _mediator.Send(command);
+
+    // Assert
+    result.Should().NotBeNull();
+    result.Sku.Should().Be("TEST-001");
+}
+```
+
+## 📊 Business Logic
+
+### Stock Management Rules
+
+1. **Reorder Alerts**: Automatic notifications when `CurrentStock < ReorderPoint`
+2. **Stock Validation**: Cannot issue more stock than available
+3. **Concurrency Control**: Row version checks prevent lost updates
+4. **Audit Trail**: All movements tracked with user, timestamp, and reason
+
+### Work Order Workflow
+
+```
+Draft → Submitted → Approved → In Progress → Completed
+                  ↓
+               Rejected
+```
+
+**Transitions**:
+- Draft → Submitted: Operator submits for approval
+- Submitted → Approved: Manager approves
+- Submitted → Rejected: Manager rejects
+- Approved → In Progress: Operator starts work
+- In Progress → Completed: Operator completes work
+
+### Inventory Valuation Methods
+
+- **FIFO** (First In, First Out)
+- **LIFO** (Last In, First Out)
+- **Average Cost**: Weighted average calculation
+
+## 🔧 Development
+
+### Adding a New Feature
+
+1. **Define Domain Entity** in `InventoryAPI.Domain/Entities`
+2. **Create DTOs** for request/response
+3. **Implement Commands/Queries** in `InventoryAPI.Application`
+4. **Add Validators** using FluentValidation
+5. **Create Controller** in `InventoryAPI.Api/Controllers`
+6. **Add Migrations**: `dotnet ef migrations add FeatureName`
+7. **Write Tests** for business logic and endpoints
+
+### Code Quality
+
+- **StyleCop**: Enforces coding standards
+- **Code Analysis**: Roslyn analyzers enabled
+- **EditorConfig**: Consistent formatting rules
+- **SonarQube**: Static code analysis (recommended for CI/CD)
+
+### Database Migrations
+
+```bash
+# Create a new migration
+dotnet ef migrations add MigrationName -p src/InventoryAPI.Infrastructure -s src/InventoryAPI.Api
+
+# Update database
+dotnet ef database update -p src/InventoryAPI.Infrastructure -s src/InventoryAPI.Api
+
+# Rollback migration
+dotnet ef database update PreviousMigrationName -p src/InventoryAPI.Infrastructure -s src/InventoryAPI.Api
+```
+
+## 🚀 Deployment
+
+### Docker
+
+```bash
+# Build image
+docker build -t inventory-api:latest .
+
+# Run container
+docker run -d \
+  -p 5000:80 \
+  -e ConnectionStrings__DefaultConnection="Host=postgres;Database=inventorydb;Username=user;Password=pass" \
+  -e JwtSettings__SecretKey="your-secret-key" \
+  --name inventory-api \
+  inventory-api:latest
+```
+
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ConnectionStrings__DefaultConnection` | PostgreSQL connection string | Yes |
+| `JwtSettings__SecretKey` | JWT signing key (min 32 chars) | Yes |
+| `JwtSettings__ExpiryMinutes` | Token expiration time | No |
+| `Serilog__MinimumLevel` | Logging level | No |
+
+## 📝 API Documentation
+
+Interactive API documentation is available via Swagger UI when running the application:
+
+- **Swagger UI**: `https://localhost:5001/swagger`
+- **OpenAPI JSON**: `https://localhost:5001/swagger/v1/swagger.json`
+
+The Swagger interface provides:
+- Complete endpoint documentation
+- Request/response schemas
+- Try-it-out functionality
+- Authentication support
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Coding Standards
+
+- Follow C# coding conventions
+- Write unit tests for new features
+- Update documentation as needed
+- Ensure all tests pass before submitting PR
+- Maintain code coverage above 70%
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Built with [ASP.NET Core](https://docs.microsoft.com/aspnet/core)
+- Inspired by Clean Architecture principles from Robert C. Martin
+- CQRS pattern implementation using [MediatR](https://github.com/jbogard/MediatR)
+
+## 📞 Support
+
+For questions, issues, or feature requests:
+- Open an [issue](https://github.com/yourusername/ASP.NET-Core-Inventory-Management-API-/issues)
+- Check existing [documentation](https://github.com/yourusername/ASP.NET-Core-Inventory-Management-API-/wiki)
+- Review [API examples](https://github.com/yourusername/ASP.NET-Core-Inventory-Management-API-/tree/main/examples)
+
+---
+
+**Built with ❤️ using ASP.NET Core 8**

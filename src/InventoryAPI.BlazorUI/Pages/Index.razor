@@ -1,0 +1,149 @@
+@page "/"
+@attribute [Authorize]
+@inject ProductService ProductService
+@inject WorkOrderService WorkOrderService
+
+<PageTitle>Dashboard - Inventory Management</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+
+<MudGrid>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="2" Class="pa-4 stat-card">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <div>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Total Products</MudText>
+                    <MudText Typo="Typo.h4">@_totalProducts</MudText>
+                </div>
+                <MudIcon Icon="@Icons.Material.Filled.Inventory" Size="Size.Large" Color="Color.Primary" />
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="2" Class="pa-4 stat-card">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <div>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Low Stock Items</MudText>
+                    <MudText Typo="Typo.h4" Color="Color.Warning">@_lowStockCount</MudText>
+                </div>
+                <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Warning" />
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="2" Class="pa-4 stat-card">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <div>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Pending Work Orders</MudText>
+                    <MudText Typo="Typo.h4">@_pendingWorkOrders</MudText>
+                </div>
+                <MudIcon Icon="@Icons.Material.Filled.Assignment" Size="Size.Large" Color="Color.Info" />
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="2" Class="pa-4 stat-card">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <div>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Total Stock Value</MudText>
+                    <MudText Typo="Typo.h4">$@_totalValue.ToString("N2")</MudText>
+                </div>
+                <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Size="Size.Large" Color="Color.Success" />
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudGrid Class="mt-4">
+    <MudItem xs="12" md="6">
+        <MudPaper Elevation="2" Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-3">Quick Actions</MudText>
+            <MudStack Spacing="2">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/products/create" StartIcon="@Icons.Material.Filled.Add" FullWidth="true">
+                    Add New Product
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Href="/work-orders/create" StartIcon="@Icons.Material.Filled.Add" FullWidth="true">
+                    Create Work Order
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Tertiary" Href="/stock-movements/create" StartIcon="@Icons.Material.Filled.MoveToInbox" FullWidth="true">
+                    Record Stock Movement
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Elevation="2" Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-3">Low Stock Alert</MudText>
+            @if (_lowStockProducts != null && _lowStockProducts.Any())
+            {
+                <MudList Dense="true">
+                    @foreach (var product in _lowStockProducts.Take(5))
+                    {
+                        <MudListItem Icon="@Icons.Material.Filled.Warning" IconColor="Color.Warning">
+                            <MudText>@product.Name (@product.SKU)</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Stock: @product.CurrentStock / Reorder: @product.ReorderPoint</MudText>
+                        </MudListItem>
+                    }
+                </MudList>
+                @if (_lowStockProducts.Count > 5)
+                {
+                    <MudButton Href="/reports/low-stock" Color="Color.Primary" Size="Size.Small" Class="mt-2">View All (@_lowStockProducts.Count)</MudButton>
+                }
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">No low stock items</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private int _totalProducts = 0;
+    private int _lowStockCount = 0;
+    private int _pendingWorkOrders = 0;
+    private decimal _totalValue = 0;
+    private List<ProductDto> _lowStockProducts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardDataAsync();
+    }
+
+    private async Task LoadDashboardDataAsync()
+    {
+        try
+        {
+            // Load all products
+            var productsResult = await ProductService.GetProductsAsync(1, 100);
+            if (productsResult != null)
+            {
+                _totalProducts = productsResult.TotalCount;
+                _totalValue = productsResult.Items.Sum(p => p.CurrentStock * p.UnitCost);
+            }
+
+            // Load low stock products
+            var lowStockResult = await ProductService.GetProductsAsync(1, 100, lowStockOnly: true);
+            if (lowStockResult != null)
+            {
+                _lowStockCount = lowStockResult.TotalCount;
+                _lowStockProducts = lowStockResult.Items;
+            }
+
+            // Load work orders (placeholder)
+            var workOrdersResult = await WorkOrderService.GetWorkOrdersAsync();
+            if (workOrdersResult != null)
+            {
+                _pendingWorkOrders = workOrdersResult.TotalCount;
+            }
+        }
+        catch
+        {
+            // Handle errors silently for now
+        }
+    }
+}

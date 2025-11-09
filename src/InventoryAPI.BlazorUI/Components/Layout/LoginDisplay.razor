@@ -1,0 +1,34 @@
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<AuthorizeView>
+    <Authorized>
+        <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight">
+            <MudMenuItem>
+                <div class="d-flex flex-column">
+                    <MudText Typo="Typo.body2">@context.User.Identity?.Name</MudText>
+                    <MudText Typo="Typo.caption">@GetUserRole(context)</MudText>
+                </div>
+            </MudMenuItem>
+            <MudDivider />
+            <MudMenuItem OnClick="LogoutAsync" Icon="@Icons.Material.Filled.Logout">Logout</MudMenuItem>
+        </MudMenu>
+    </Authorized>
+    <NotAuthorized>
+        <MudButton Variant="Variant.Text" Color="Color.Inherit" Href="/login">Login</MudButton>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private async Task LogoutAsync()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+
+    private string GetUserRole(AuthenticationState authState)
+    {
+        var roleClaim = authState.User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Role);
+        return roleClaim?.Value ?? "User";
+    }
+}

@@ -1,0 +1,184 @@
+@page "/products"
+@attribute [Authorize]
+@inject ProductService ProductService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Products - Inventory Management</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Products</MudText>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudTextField @bind-Value="_searchTerm"
+                          Label="Search"
+                          Placeholder="Search by SKU, name, or description"
+                          Variant="Variant.Outlined"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          OnKeyUp="@((e) => { if (e.Key == "Enter") SearchAsync(); })" />
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudSelect @bind-Value="_selectedCategory"
+                       Label="Category"
+                       Variant="Variant.Outlined"
+                       Clearable="true">
+                <MudSelectItem Value="@("")">All Categories</MudSelectItem>
+                <MudSelectItem Value="@("Widgets")">Widgets</MudSelectItem>
+                <MudSelectItem Value="@("Fasteners")">Fasteners</MudSelectItem>
+                <MudSelectItem Value="@("Mechanical")">Mechanical</MudSelectItem>
+                <MudSelectItem Value="@("Cables")">Cables</MudSelectItem>
+                <MudSelectItem Value="@("Seals")">Seals</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudCheckBox @bind-Checked="_lowStockOnly" Label="Low Stock Only" Color="Color.Warning" />
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchAsync" StartIcon="@Icons.Material.Filled.Search">Search</MudButton>
+                <AuthorizeView Roles="Admin,Manager">
+                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" Href="/products/create" StartIcon="@Icons.Material.Filled.Add">Add Product</MudButton>
+                </AuthorizeView>
+            </MudStack>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
+
+<MudTable Items="@_products" Hover="true" Striped="true" Dense="true" Loading="@_isLoading">
+    <HeaderContent>
+        <MudTh>SKU</MudTh>
+        <MudTh>Name</MudTh>
+        <MudTh>Category</MudTh>
+        <MudTh>Current Stock</MudTh>
+        <MudTh>Reorder Point</MudTh>
+        <MudTh>Unit Cost</MudTh>
+        <MudTh>Location</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="SKU">
+            <MudText Typo="Typo.body2" Class="font-weight-bold">@context.SKU</MudText>
+        </MudTd>
+        <MudTd DataLabel="Name">
+            @context.Name
+            @if (context.IsLowStock)
+            {
+                <MudChip Size="Size.Small" Color="Color.Warning" Class="ml-2">Low Stock</MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Category">@context.Category</MudTd>
+        <MudTd DataLabel="Current Stock">
+            <MudText Color="@(context.IsLowStock ? Color.Warning : Color.Default)">@context.CurrentStock @context.UnitOfMeasure</MudText>
+        </MudTd>
+        <MudTd DataLabel="Reorder Point">@context.ReorderPoint @context.UnitOfMeasure</MudTd>
+        <MudTd DataLabel="Unit Cost">$@context.UnitCost.ToString("N2")</MudTd>
+        <MudTd DataLabel="Location">@context.Location</MudTd>
+        <MudTd DataLabel="Actions">
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" Href="@($"/products/edit/{context.Id}")" />
+            <AuthorizeView Roles="Admin">
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteProductAsync(context.Id))" />
+            </AuthorizeView>
+        </MudTd>
+    </RowTemplate>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+    </PagerContent>
+</MudTable>
+
+<MudText Typo="Typo.body2" Class="mt-2" Color="Color.Secondary">
+    Showing @_products.Count of @_totalCount products
+</MudText>
+
+@code {
+    private List<ProductDto> _products = new();
+    private bool _isLoading = false;
+    private string _searchTerm = "";
+    private string _selectedCategory = "";
+    private bool _lowStockOnly = false;
+    private int _currentPage = 1;
+    private int _pageSize = 10;
+    private int _totalCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProductsAsync();
+    }
+
+    private async Task LoadProductsAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            var result = await ProductService.GetProductsAsync(
+                _currentPage,
+                _pageSize,
+                string.IsNullOrWhiteSpace(_selectedCategory) ? null : _selectedCategory,
+                string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm,
+                _lowStockOnly ? true : null);
+
+            if (result != null)
+            {
+                _products = result.Items;
+                _totalCount = result.TotalCount;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading products: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        _currentPage = 1;
+        await LoadProductsAsync();
+    }
+
+    private async Task DeleteProductAsync(Guid id)
+    {
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = "Are you sure you want to delete this product? This action cannot be undone.",
+            ["ButtonText"] = "Delete",
+            ["Color"] = Color.Error
+        };
+
+        var options = new DialogOptions() { CloseButton = true, MaxWidth = MaxWidth.ExtraSmall };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Delete", parameters, options);
+        var dialogResult = await dialog.Result;
+
+        if (!dialogResult.Canceled)
+        {
+            try
+            {
+                var success = await ProductService.DeleteProductAsync(id);
+                if (success)
+                {
+                    Snackbar.Add("Product deleted successfully", Severity.Success);
+                    await LoadProductsAsync();
+                }
+                else
+                {
+                    Snackbar.Add("Failed to delete product", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting product: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}

@@ -43,6 +43,19 @@ services:
       - inventory-network
     restart: unless-stopped
 
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.blazor
+    container_name: inventory-ui
+    ports:
+      - "3000:80"
+    networks:
+      - inventory-network
+    restart: unless-stopped
+    depends_on:
+      - api
+
 networks:
   inventory-network:
     driver: bridge

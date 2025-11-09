@@ -1,0 +1,25 @@
+<MudNavMenu>
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
+        Dashboard
+    </MudNavLink>
+    <MudNavLink Href="/products" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Inventory">
+        Products
+    </MudNavLink>
+    <MudNavLink Href="/work-orders" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assignment">
+        Work Orders
+    </MudNavLink>
+    <MudNavLink Href="/stock-movements" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MoveToInbox">
+        Stock Movements
+    </MudNavLink>
+
+    <MudDivider Class="my-2" />
+
+    <MudNavGroup Title="Reports" Icon="@Icons.Material.Filled.Assessment" Expanded="false">
+        <MudNavLink Href="/reports/low-stock" Icon="@Icons.Material.Filled.Warning">
+            Low Stock
+        </MudNavLink>
+        <MudNavLink Href="/reports/pending-orders" Icon="@Icons.Material.Filled.PendingActions">
+            Pending Orders
+        </MudNavLink>
+    </MudNavGroup>
+</MudNavMenu>

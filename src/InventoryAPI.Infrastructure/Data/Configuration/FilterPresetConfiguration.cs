@@ -27,7 +27,9 @@ public class FilterPresetConfiguration : IEntityTypeConfiguration<FilterPreset>
             .IsRequired();
 
         builder.Property(fp => fp.RowVersion)
-            .IsRowVersion();
+            .IsRowVersion()
+            .IsConcurrencyToken()
+            .ValueGeneratedOnAddOrUpdate();
 
         // Indexes for performance
         builder.HasIndex(fp => new { fp.UserId, fp.EntityType });

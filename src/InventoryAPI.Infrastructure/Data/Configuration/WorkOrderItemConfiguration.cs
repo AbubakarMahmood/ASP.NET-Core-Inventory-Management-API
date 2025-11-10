@@ -19,7 +19,9 @@ public class WorkOrderItemConfiguration : IEntityTypeConfiguration<WorkOrderItem
             .HasMaxLength(500);
 
         builder.Property(woi => woi.RowVersion)
-            .IsRowVersion();
+            .IsRowVersion()
+            .IsConcurrencyToken()
+            .ValueGeneratedOnAddOrUpdate();
 
         // Composite index for common queries
         builder.HasIndex(woi => new { woi.WorkOrderId, woi.ProductId });

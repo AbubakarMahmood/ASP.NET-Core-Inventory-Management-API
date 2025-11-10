@@ -59,7 +59,7 @@ docker-compose up --build
 ```
 
 **What this does:**
-- ✅ Starts PostgreSQL database (port 5432)
+- ✅ Starts PostgreSQL database (port 5433 on host, to avoid conflicts)
 - ✅ Builds and runs the API (port 5000)
 - ✅ Builds and runs the Blazor UI (port 3000)
 - ✅ Creates network connectivity between all services
@@ -121,9 +121,11 @@ docker run --name inventory-postgres `
   -e POSTGRES_DB=inventorydb `
   -e POSTGRES_USER=inventoryuser `
   -e POSTGRES_PASSWORD=InventoryPass123! `
-  -p 5432:5432 `
+  -p 5433:5432 `
   -d postgres:14-alpine
 ```
+
+**Note:** We use port 5433 on the host to avoid conflicts if you have PostgreSQL already installed.
 
 **Option B: Install PostgreSQL on Windows**
 
@@ -442,20 +444,22 @@ The application seeds default users on first run:
 2. In Docker Desktop settings, enable WSL 2 integration
 3. Run `docker-compose down` then `docker-compose up --build`
 
-**Problem:** `Port 5432 already in use`
+**Problem:** `Port 5433 already in use`
 
 **Solution:**
 ```powershell
-# Find what's using port 5432
-netstat -ano | findstr :5432
+# Find what's using port 5433
+netstat -ano | findstr :5433
 
 # Kill the process (replace PID)
 taskkill /PID <PID> /F
 
-# Or change the port in docker-compose.yml
+# Or change the port in docker-compose.yml to another port
 ports:
-  - "5433:5432"  # Use 5433 on host instead
+  - "5434:5432"  # Use 5434 on host instead
 ```
+
+**Note:** The docker-compose.yml already uses port 5433 to avoid conflicts with locally-installed PostgreSQL on the default port 5432.
 
 ### .NET SDK Issues
 
@@ -544,7 +548,7 @@ Update the URL to match your API address.
 **Default Ports:**
 - API: 5000 (HTTP), 5001 (HTTPS)
 - Blazor UI: 5002, 5003, or 3000 (Docker)
-- PostgreSQL: 5432
+- PostgreSQL: 5433 (host) → 5432 (container)
 
 **To use different ports:**
 

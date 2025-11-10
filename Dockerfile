@@ -8,6 +8,9 @@ COPY ["src/InventoryAPI.Api/InventoryAPI.Api.csproj", "src/InventoryAPI.Api/"]
 COPY ["src/InventoryAPI.Application/InventoryAPI.Application.csproj", "src/InventoryAPI.Application/"]
 COPY ["src/InventoryAPI.Domain/InventoryAPI.Domain.csproj", "src/InventoryAPI.Domain/"]
 COPY ["src/InventoryAPI.Infrastructure/InventoryAPI.Infrastructure.csproj", "src/InventoryAPI.Infrastructure/"]
+COPY ["src/InventoryAPI.BlazorUI/InventoryAPI.BlazorUI.csproj", "src/InventoryAPI.BlazorUI/"]
+COPY ["tests/InventoryAPI.UnitTests/InventoryAPI.UnitTests.csproj", "tests/InventoryAPI.UnitTests/"]
+COPY ["tests/InventoryAPI.IntegrationTests/InventoryAPI.IntegrationTests.csproj", "tests/InventoryAPI.IntegrationTests/"]
 
 # Restore dependencies
 RUN dotnet restore

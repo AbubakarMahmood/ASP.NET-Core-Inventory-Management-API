@@ -3,7 +3,6 @@ using InventoryAPI.Application.DTOs;
 using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Domain.Entities;
 using InventoryAPI.Domain.Enums;
-using InventoryAPI.Application.Interfaces;
 using MediatR;
 
 namespace InventoryAPI.Application.Commands.WorkOrders;

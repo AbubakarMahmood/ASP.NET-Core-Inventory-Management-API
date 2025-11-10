@@ -2,7 +2,6 @@ using InventoryAPI.Application.Interfaces;
 using AutoMapper;
 using InventoryAPI.Application.Common;
 using InventoryAPI.Application.DTOs;
-using InventoryAPI.Infrastructure.Data;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

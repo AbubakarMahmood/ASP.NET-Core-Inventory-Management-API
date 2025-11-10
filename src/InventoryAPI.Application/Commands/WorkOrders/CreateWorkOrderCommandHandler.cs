@@ -86,7 +86,7 @@ public class CreateWorkOrderCommandHandler : IRequestHandler<CreateWorkOrderComm
     private async Task<string> GenerateOrderNumberAsync(CancellationToken cancellationToken)
     {
         // Get count of work orders to generate sequential number
-        var count = await _unitOfWork.WorkOrders.CountAsync(cancellationToken);
+        var count = await _unitOfWork.WorkOrders.CountAsync(w => true, cancellationToken);
         var orderNumber = $"WO-{DateTime.UtcNow:yyyyMMdd}-{(count + 1):D4}";
         return orderNumber;
     }

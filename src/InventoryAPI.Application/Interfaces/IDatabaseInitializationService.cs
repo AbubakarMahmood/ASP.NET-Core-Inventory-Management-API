@@ -1,4 +1,4 @@
-using InventoryAPI.Infrastructure.Services;
+using InventoryAPI.Application.Models;
 
 namespace InventoryAPI.Application.Interfaces;
 

@@ -1,6 +1,6 @@
+using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Domain.Entities;
 using InventoryAPI.Domain.Enums;
-using InventoryAPI.Infrastructure.Services;
 
 namespace InventoryAPI.Infrastructure.Data;
 

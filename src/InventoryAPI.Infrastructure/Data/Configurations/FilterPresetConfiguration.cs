@@ -24,7 +24,7 @@ public class FilterPresetConfiguration : IEntityTypeConfiguration<FilterPreset>
             .IsRequired()
             .HasMaxLength(50);
 
-        builder.Property(fp => fp.FilterCriteria)
+        builder.Property(fp => fp.FilterData)
             .IsRequired();
 
         builder.Property(fp => fp.RowVersion)

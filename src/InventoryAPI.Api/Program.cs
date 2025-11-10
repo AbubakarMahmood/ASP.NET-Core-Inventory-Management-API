@@ -38,6 +38,13 @@ builder.Services.AddSignalR();
 // HttpContextAccessor (needed for accessing current user in handlers)
 builder.Services.AddHttpContextAccessor();
 
+// Data Protection - Persist keys to a directory that survives container restarts
+var dataProtectionPath = Path.Combine("/app", "data-protection-keys");
+Directory.CreateDirectory(dataProtectionPath);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
+    .SetApplicationName("InventoryAPI");
+
 // Database
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -200,37 +207,18 @@ if (app.Environment.IsDevelopment())
         var canConnect = await context.Database.CanConnectAsync();
         if (canConnect)
         {
-            // Check if Users table exists using a safer method
-            bool tablesExist = false;
-            try
-            {
-                // Try to query information_schema
-                using var command = context.Database.GetDbConnection().CreateCommand();
-                command.CommandText = @"SELECT EXISTS (
-                    SELECT 1 FROM information_schema.tables
-                    WHERE table_schema = 'public' AND table_name = 'Users'
-                )";
-                await context.Database.OpenConnectionAsync();
-                var result = await command.ExecuteScalarAsync();
-                tablesExist = result != null && (bool)result;
-                await context.Database.CloseConnectionAsync();
-            }
-            catch
-            {
-                tablesExist = false;
-            }
+            Log.Information("Checking for pending migrations...");
+            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
 
-            if (!tablesExist)
+            if (pendingMigrations.Any())
             {
-                Log.Information("Tables don't exist. Creating database schema...");
-                // Use EnsureCreated to create tables from DbContext model
-                await context.Database.EnsureCreatedAsync();
-                Log.Information("Database schema created successfully");
+                Log.Information($"Applying {pendingMigrations.Count()} pending migration(s)...");
+                await context.Database.MigrateAsync();
+                Log.Information("Database migrations applied successfully");
             }
             else
             {
-                // Apply any pending migrations
-                await context.Database.MigrateAsync();
+                Log.Information("Database is up to date. No migrations needed.");
             }
         }
 

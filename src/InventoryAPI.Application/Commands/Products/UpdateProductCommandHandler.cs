@@ -2,6 +2,7 @@ using AutoMapper;
 using InventoryAPI.Application.DTOs;
 using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Domain.Exceptions;
+using InventoryAPI.Infrastructure.Data;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,10 +14,10 @@ namespace InventoryAPI.Application.Commands.Products;
 public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand, ProductDto>
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IApplicationDbContext _context;
+    private readonly ApplicationDbContext _context;
     private readonly IMapper _mapper;
 
-    public UpdateProductCommandHandler(IUnitOfWork unitOfWork, IApplicationDbContext context, IMapper mapper)
+    public UpdateProductCommandHandler(IUnitOfWork unitOfWork, ApplicationDbContext context, IMapper mapper)
     {
         _unitOfWork = unitOfWork;
         _context = context;

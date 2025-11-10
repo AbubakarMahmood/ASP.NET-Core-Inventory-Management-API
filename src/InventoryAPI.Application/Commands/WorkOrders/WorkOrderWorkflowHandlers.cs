@@ -479,7 +479,7 @@ public class IssueWorkOrderItemsCommandHandler : IRequestHandler<IssueWorkOrderI
                     ProductId = issueRequest.ProductId,
                     Type = StockMovementType.Issue,
                     Quantity = issueRequest.Quantity,
-                    SourceLocation = issueRequest.FromLocation,
+                    SourceLocation = issueRequest.FromLocation ?? string.Empty,
                     Reason = $"Issued for Work Order {workOrder.OrderNumber}",
                     Reference = workOrder.OrderNumber,
                     WorkOrderId = workOrder.Id

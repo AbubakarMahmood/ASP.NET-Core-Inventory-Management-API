@@ -246,7 +246,7 @@
         <MudTd DataLabel="Location">@context.Location</MudTd>
         <MudTd DataLabel="Actions">
             <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" Href="@($"/products/edit/{context.Id}")" />
-            <AuthorizeView Roles="Admin">
+            <AuthorizeView Roles="Admin" Context="authorized">
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteProductAsync(context.Id))" />
             </AuthorizeView>
         </MudTd>

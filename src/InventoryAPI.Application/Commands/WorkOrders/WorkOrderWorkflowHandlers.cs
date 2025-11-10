@@ -479,9 +479,9 @@ public class IssueWorkOrderItemsCommandHandler : IRequestHandler<IssueWorkOrderI
                     ProductId = issueRequest.ProductId,
                     Type = StockMovementType.Issue,
                     Quantity = issueRequest.Quantity,
-                    FromLocation = issueRequest.FromLocation,
+                    SourceLocation = issueRequest.FromLocation,
                     Reason = $"Issued for Work Order {workOrder.OrderNumber}",
-                    ReferenceNumber = workOrder.OrderNumber,
+                    Reference = workOrder.OrderNumber,
                     WorkOrderId = workOrder.Id
                 };
 

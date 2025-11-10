@@ -1,7 +1,8 @@
 using AutoMapper;
 using InventoryAPI.Application.DTOs;
-using InventoryAPI.Domain.Exceptions;
 using InventoryAPI.Application.Interfaces;
+using InventoryAPI.Domain.Entities;
+using InventoryAPI.Domain.Exceptions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;

@@ -4,6 +4,7 @@ using InventoryAPI.Domain.Entities;
 using InventoryAPI.Application.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Http;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
 namespace InventoryAPI.Application.Commands.WorkOrders;
@@ -29,8 +30,8 @@ public class CreateWorkOrderCommandHandler : IRequestHandler<CreateWorkOrderComm
 
     public async Task<WorkOrderDto> Handle(CreateWorkOrderCommand request, CancellationToken cancellationToken)
     {
-        // Get current user ID from claims
-        var userIdClaim = _httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        // Get current user ID from JWT claims
+        var userIdClaim = _httpContextAccessor.HttpContext?.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var currentUserId))
         {
             throw new UnauthorizedAccessException("User not authenticated");

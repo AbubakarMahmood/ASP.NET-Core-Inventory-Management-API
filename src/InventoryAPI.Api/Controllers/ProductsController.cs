@@ -105,8 +105,10 @@ public class ProductsController : ControllerBase
     {
         _logger.LogInformation("Retrieving product with ID: {Id}", id);
 
-        // TODO: Implement GetProductByIdQuery
-        return StatusCode(StatusCodes.Status501NotImplemented, "Get product by ID not yet implemented");
+        var query = new GetProductByIdQuery { Id = id };
+        var result = await _mediator.Send(query);
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -121,12 +123,20 @@ public class ProductsController : ControllerBase
     [Authorize(Roles = "Admin,Manager")]
     [ProducesResponseType(typeof(ProductDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ProductDto>> UpdateProduct(Guid id, [FromBody] CreateProductCommand command)
+    public async Task<ActionResult<ProductDto>> UpdateProduct(Guid id, [FromBody] UpdateProductCommand command)
     {
+        if (id != command.Id)
+        {
+            return BadRequest("ID in URL does not match ID in request body");
+        }
+
         _logger.LogInformation("Updating product with ID: {Id}", id);
 
-        // TODO: Implement UpdateProductCommand
-        return StatusCode(StatusCodes.Status501NotImplemented, "Update product not yet implemented");
+        var result = await _mediator.Send(command);
+
+        _logger.LogInformation("Product updated successfully with ID: {Id}", result.Id);
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -144,8 +154,12 @@ public class ProductsController : ControllerBase
     {
         _logger.LogInformation("Deleting product with ID: {Id}", id);
 
-        // TODO: Implement DeleteProductCommand
-        return StatusCode(StatusCodes.Status501NotImplemented, "Delete product not yet implemented");
+        var command = new DeleteProductCommand { Id = id };
+        await _mediator.Send(command);
+
+        _logger.LogInformation("Product deleted successfully with ID: {Id}", id);
+
+        return NoContent();
     }
 
     /// <summary>

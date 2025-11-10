@@ -1,0 +1,46 @@
+@using InventoryAPI.BlazorUI.Models
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@Title</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText>@Message</MudText>
+            <MudTextField @bind-Value="_inputValue" Label="@Placeholder" Variant="Variant.Outlined" Required="true" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit" Disabled="@(string.IsNullOrWhiteSpace(_inputValue))">Submit</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private MudDialogInstance? MudDialog { get; set; }
+
+    [Parameter]
+    public string Title { get; set; } = "Input";
+
+    [Parameter]
+    public string Message { get; set; } = "";
+
+    [Parameter]
+    public string Placeholder { get; set; } = "";
+
+    private string _inputValue = "";
+
+    private void Submit()
+    {
+        if (!string.IsNullOrWhiteSpace(_inputValue))
+        {
+            MudDialog?.Close(DialogResult.Ok(_inputValue));
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+    }
+}

@@ -22,6 +22,9 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
     {
         var auditLogs = new List<AuditLogDto>();
 
+        // Ensure ToDate includes the entire day (set to end of day)
+        var toDate = request.ToDate.HasValue ? request.ToDate.Value.Date.AddDays(1).AddTicks(-1) : (DateTime?)null;
+
         // Get audit logs from different entity types based on filter
         var shouldIncludeProducts = string.IsNullOrEmpty(request.EntityType) || request.EntityType == "Product";
         var shouldIncludeWorkOrders = string.IsNullOrEmpty(request.EntityType) || request.EntityType == "WorkOrder";
@@ -32,14 +35,19 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
         if (shouldIncludeProducts)
         {
             var products = await _context.Products
-                .Where(p => !request.FromDate.HasValue || p.CreatedAt >= request.FromDate.Value)
-                .Where(p => !request.ToDate.HasValue || p.CreatedAt <= request.ToDate.Value)
-                .Where(p => string.IsNullOrEmpty(request.PerformedBy) || p.CreatedBy.Contains(request.PerformedBy))
+                .AsNoTracking()
+                .Where(p => string.IsNullOrEmpty(request.PerformedBy) ||
+                            p.CreatedBy.Contains(request.PerformedBy) ||
+                            (p.ModifiedBy != null && p.ModifiedBy.Contains(request.PerformedBy)) ||
+                            (p.DeletedBy != null && p.DeletedBy.Contains(request.PerformedBy)))
                 .ToListAsync(cancellationToken);
 
             foreach (var product in products)
             {
-                if (string.IsNullOrEmpty(request.Action) || request.Action == "Created")
+                // Created action
+                if ((string.IsNullOrEmpty(request.Action) || request.Action == "Created") &&
+                    (!request.FromDate.HasValue || product.CreatedAt >= request.FromDate.Value) &&
+                    (!toDate.HasValue || product.CreatedAt <= toDate.Value))
                 {
                     auditLogs.Add(new AuditLogDto
                     {
@@ -52,7 +60,11 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
                     });
                 }
 
-                if (product.ModifiedAt.HasValue && (string.IsNullOrEmpty(request.Action) || request.Action == "Modified"))
+                // Modified action
+                if (product.ModifiedAt.HasValue &&
+                    (string.IsNullOrEmpty(request.Action) || request.Action == "Modified") &&
+                    (!request.FromDate.HasValue || product.ModifiedAt.Value >= request.FromDate.Value) &&
+                    (!toDate.HasValue || product.ModifiedAt.Value <= toDate.Value))
                 {
                     auditLogs.Add(new AuditLogDto
                     {
@@ -65,17 +77,24 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
                     });
                 }
 
-                if (product.IsDeleted && (string.IsNullOrEmpty(request.Action) || request.Action == "Deleted"))
+                // Deleted action
+                if (product.IsDeleted &&
+                    (string.IsNullOrEmpty(request.Action) || request.Action == "Deleted"))
                 {
-                    auditLogs.Add(new AuditLogDto
+                    var deletedTimestamp = product.DeletedAt ?? product.ModifiedAt ?? product.CreatedAt;
+                    if ((!request.FromDate.HasValue || deletedTimestamp >= request.FromDate.Value) &&
+                        (!toDate.HasValue || deletedTimestamp <= toDate.Value))
                     {
-                        EntityType = "Product",
-                        EntityId = product.Id,
-                        EntityIdentifier = $"{product.SKU} - {product.Name}",
-                        Action = "Deleted",
-                        Timestamp = product.DeletedAt ?? product.ModifiedAt ?? product.CreatedAt,
-                        PerformedBy = product.DeletedBy ?? product.ModifiedBy ?? "System"
-                    });
+                        auditLogs.Add(new AuditLogDto
+                        {
+                            EntityType = "Product",
+                            EntityId = product.Id,
+                            EntityIdentifier = $"{product.SKU} - {product.Name}",
+                            Action = "Deleted",
+                            Timestamp = deletedTimestamp,
+                            PerformedBy = product.DeletedBy ?? product.ModifiedBy ?? "System"
+                        });
+                    }
                 }
             }
         }
@@ -84,14 +103,18 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
         if (shouldIncludeWorkOrders)
         {
             var workOrders = await _context.WorkOrders
-                .Where(w => !request.FromDate.HasValue || w.CreatedAt >= request.FromDate.Value)
-                .Where(w => !request.ToDate.HasValue || w.CreatedAt <= request.ToDate.Value)
-                .Where(w => string.IsNullOrEmpty(request.PerformedBy) || w.CreatedBy.Contains(request.PerformedBy))
+                .AsNoTracking()
+                .Where(w => string.IsNullOrEmpty(request.PerformedBy) ||
+                            w.CreatedBy.Contains(request.PerformedBy) ||
+                            (w.ModifiedBy != null && w.ModifiedBy.Contains(request.PerformedBy)))
                 .ToListAsync(cancellationToken);
 
             foreach (var workOrder in workOrders)
             {
-                if (string.IsNullOrEmpty(request.Action) || request.Action == "Created")
+                // Created action
+                if ((string.IsNullOrEmpty(request.Action) || request.Action == "Created") &&
+                    (!request.FromDate.HasValue || workOrder.CreatedAt >= request.FromDate.Value) &&
+                    (!toDate.HasValue || workOrder.CreatedAt <= toDate.Value))
                 {
                     auditLogs.Add(new AuditLogDto
                     {
@@ -104,7 +127,11 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
                     });
                 }
 
-                if (workOrder.ModifiedAt.HasValue && (string.IsNullOrEmpty(request.Action) || request.Action == "Modified"))
+                // Modified action
+                if (workOrder.ModifiedAt.HasValue &&
+                    (string.IsNullOrEmpty(request.Action) || request.Action == "Modified") &&
+                    (!request.FromDate.HasValue || workOrder.ModifiedAt.Value >= request.FromDate.Value) &&
+                    (!toDate.HasValue || workOrder.ModifiedAt.Value <= toDate.Value))
                 {
                     auditLogs.Add(new AuditLogDto
                     {
@@ -123,14 +150,18 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
         if (shouldIncludeUsers)
         {
             var users = await _context.Users
-                .Where(u => !request.FromDate.HasValue || u.CreatedAt >= request.FromDate.Value)
-                .Where(u => !request.ToDate.HasValue || u.CreatedAt <= request.ToDate.Value)
-                .Where(u => string.IsNullOrEmpty(request.PerformedBy) || u.CreatedBy.Contains(request.PerformedBy))
+                .AsNoTracking()
+                .Where(u => string.IsNullOrEmpty(request.PerformedBy) ||
+                            u.CreatedBy.Contains(request.PerformedBy) ||
+                            (u.ModifiedBy != null && u.ModifiedBy.Contains(request.PerformedBy)))
                 .ToListAsync(cancellationToken);
 
             foreach (var user in users)
             {
-                if (string.IsNullOrEmpty(request.Action) || request.Action == "Created")
+                // Created action
+                if ((string.IsNullOrEmpty(request.Action) || request.Action == "Created") &&
+                    (!request.FromDate.HasValue || user.CreatedAt >= request.FromDate.Value) &&
+                    (!toDate.HasValue || user.CreatedAt <= toDate.Value))
                 {
                     auditLogs.Add(new AuditLogDto
                     {
@@ -143,7 +174,11 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
                     });
                 }
 
-                if (user.ModifiedAt.HasValue && (string.IsNullOrEmpty(request.Action) || request.Action == "Modified"))
+                // Modified action
+                if (user.ModifiedAt.HasValue &&
+                    (string.IsNullOrEmpty(request.Action) || request.Action == "Modified") &&
+                    (!request.FromDate.HasValue || user.ModifiedAt.Value >= request.FromDate.Value) &&
+                    (!toDate.HasValue || user.ModifiedAt.Value <= toDate.Value))
                 {
                     auditLogs.Add(new AuditLogDto
                     {
@@ -163,8 +198,9 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
         {
             var movements = await _context.StockMovements
                 .Include(s => s.Product)
+                .AsNoTracking()
                 .Where(s => !request.FromDate.HasValue || s.Timestamp >= request.FromDate.Value)
-                .Where(s => !request.ToDate.HasValue || s.Timestamp <= request.ToDate.Value)
+                .Where(s => !toDate.HasValue || s.Timestamp <= toDate.Value)
                 .ToListAsync(cancellationToken);
 
             foreach (var movement in movements)
@@ -175,7 +211,7 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
                     {
                         EntityType = "StockMovement",
                         EntityId = movement.Id,
-                        EntityIdentifier = $"{movement.Product?.SKU} - {movement.Type} ({movement.Quantity})",
+                        EntityIdentifier = $"{movement.Product?.SKU ?? "Unknown"} - {movement.Type} ({movement.Quantity})",
                         Action = "Created",
                         Timestamp = movement.Timestamp,
                         PerformedBy = "Stock System",

@@ -36,7 +36,9 @@ public class StockMovementConfiguration : IEntityTypeConfiguration<StockMovement
             .HasPrecision(18, 2);
 
         builder.Property(sm => sm.RowVersion)
-            .IsRowVersion();
+            .IsRowVersion()
+            .IsConcurrencyToken()
+            .ValueGeneratedOnAddOrUpdate();
 
         // Indexes for common queries
         builder.HasIndex(sm => sm.ProductId);

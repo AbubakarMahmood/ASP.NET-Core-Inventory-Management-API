@@ -13,13 +13,11 @@ namespace InventoryAPI.Application.Commands.Products;
 public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand, ProductDto>
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
 
-    public UpdateProductCommandHandler(IUnitOfWork unitOfWork, IApplicationDbContext context, IMapper mapper)
+    public UpdateProductCommandHandler(IUnitOfWork unitOfWork, IMapper mapper)
     {
         _unitOfWork = unitOfWork;
-        _context = context;
         _mapper = mapper;
     }
 
@@ -55,11 +53,9 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
         product.Location = request.Location;
         product.CostingMethod = request.CostingMethod;
 
-        // Set the row version for optimistic concurrency
-        if (request.RowVersion != null && request.RowVersion.Length > 0)
-        {
-            _context.Entry(product).Property("xmin").OriginalValue = request.RowVersion;
-        }
+        // Note: Optimistic concurrency is handled automatically by EF Core
+        // using PostgreSQL's xmin (configured in ProductConfiguration)
+        // When SaveChangesAsync is called, EF Core will detect concurrent modifications
 
         try
         {

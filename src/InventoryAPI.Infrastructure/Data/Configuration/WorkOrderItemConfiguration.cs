@@ -24,5 +24,18 @@ public class WorkOrderItemConfiguration : IEntityTypeConfiguration<WorkOrderItem
 
         // Composite index for common queries
         builder.HasIndex(woi => new { woi.WorkOrderId, woi.ProductId });
+
+        // Relationships
+        builder.HasOne(woi => woi.Product)
+            .WithMany()
+            .HasForeignKey(woi => woi.ProductId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .IsRequired();
+
+        builder.HasOne(woi => woi.WorkOrder)
+            .WithMany(wo => wo.Items)
+            .HasForeignKey(woi => woi.WorkOrderId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .IsRequired();
     }
 }

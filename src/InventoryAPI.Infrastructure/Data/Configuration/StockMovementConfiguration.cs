@@ -50,5 +50,17 @@ public class StockMovementConfiguration : IEntityTypeConfiguration<StockMovement
             .WithMany()
             .HasForeignKey(sm => sm.WorkOrderId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(sm => sm.PerformedBy)
+            .WithMany()
+            .HasForeignKey(sm => sm.PerformedById)
+            .OnDelete(DeleteBehavior.Restrict)
+            .IsRequired();
+
+        builder.HasOne(sm => sm.Product)
+            .WithMany()
+            .HasForeignKey(sm => sm.ProductId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .IsRequired();
     }
 }

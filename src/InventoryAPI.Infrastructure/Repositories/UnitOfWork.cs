@@ -1,3 +1,4 @@
+using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Domain.Entities;
 using InventoryAPI.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore.Storage;

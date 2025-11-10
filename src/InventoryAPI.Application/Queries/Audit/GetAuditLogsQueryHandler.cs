@@ -10,9 +10,9 @@ namespace InventoryAPI.Application.Queries.Audit;
 /// </summary>
 public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, PaginatedResult<AuditLogDto>>
 {
-    private readonly ApplicationDbContext _context;
+    private readonly IApplicationDbContext _context;
 
-    public GetAuditLogsQueryHandler(ApplicationDbContext context)
+    public GetAuditLogsQueryHandler(IApplicationDbContext context)
     {
         _context = context;
     }

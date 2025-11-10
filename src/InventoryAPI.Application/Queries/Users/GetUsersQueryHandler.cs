@@ -11,10 +11,10 @@ namespace InventoryAPI.Application.Queries.Users;
 /// </summary>
 public class GetUsersQueryHandler : IRequestHandler<GetUsersQuery, PaginatedResult<UserDto>>
 {
-    private readonly ApplicationDbContext _context;
+    private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
 
-    public GetUsersQueryHandler(ApplicationDbContext context, IMapper mapper)
+    public GetUsersQueryHandler(IApplicationDbContext context, IMapper mapper)
     {
         _context = context;
         _mapper = mapper;

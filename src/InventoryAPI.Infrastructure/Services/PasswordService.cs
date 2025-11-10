@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using InventoryAPI.Application.Interfaces;
 using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 
 namespace InventoryAPI.Infrastructure.Services;

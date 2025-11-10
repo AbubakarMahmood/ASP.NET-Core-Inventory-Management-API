@@ -3,7 +3,7 @@ using InventoryAPI.Application.DTOs;
 using InventoryAPI.Domain.Entities;
 using InventoryAPI.Domain.Enums;
 using InventoryAPI.Domain.Exceptions;
-using InventoryAPI.Infrastructure.Repositories;
+using InventoryAPI.Application.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;

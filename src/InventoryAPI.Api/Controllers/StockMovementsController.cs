@@ -1,3 +1,5 @@
+using InventoryAPI.Application.Common;
+using Asp.Versioning;
 using InventoryAPI.Application.Commands.StockMovements;
 using InventoryAPI.Application.DTOs;
 using InventoryAPI.Application.Queries.StockMovements;

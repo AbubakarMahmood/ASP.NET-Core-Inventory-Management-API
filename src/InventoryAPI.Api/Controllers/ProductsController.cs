@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using InventoryAPI.Application.Commands.Products;
 using InventoryAPI.Application.Common;
 using InventoryAPI.Application.DTOs;

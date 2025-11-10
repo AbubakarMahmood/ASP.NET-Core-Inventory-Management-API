@@ -57,9 +57,19 @@ public class ApiClient
         return await _httpClient.PutAsJsonAsync(endpoint, data);
     }
 
+    public async Task<TResponse?> PutAsync<TRequest, TResponse>(string endpoint, TRequest data)
+    {
+        await AddAuthHeaderAsync();
+        var response = await _httpClient.PutAsJsonAsync(endpoint, data);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<TResponse>(_jsonOptions);
+    }
+
     public async Task<HttpResponseMessage> DeleteAsync(string endpoint)
     {
         await AddAuthHeaderAsync();
         return await _httpClient.DeleteAsync(endpoint);
     }
+
+    public HttpClient HttpClient => _httpClient;
 }

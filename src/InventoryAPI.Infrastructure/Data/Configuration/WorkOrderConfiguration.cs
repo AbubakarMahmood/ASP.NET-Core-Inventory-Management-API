@@ -37,10 +37,9 @@ public class WorkOrderConfiguration : IEntityTypeConfiguration<WorkOrder>
             .IsRequired()
             .HasConversion<int>();
 
-        builder.Property(wo => wo.RowVersion)
-            .IsRowVersion()
-            .IsConcurrencyToken()
-            .ValueGeneratedOnAddOrUpdate();
+        // Use PostgreSQL's xmin system column for optimistic concurrency
+        builder.UseXminAsConcurrencyToken();
+        builder.Ignore(wo => wo.RowVersion);
 
         // Indexes for common queries
         builder.HasIndex(wo => wo.Status);

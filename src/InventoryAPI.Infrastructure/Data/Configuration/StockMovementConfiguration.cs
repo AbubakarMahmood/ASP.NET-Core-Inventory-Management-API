@@ -35,10 +35,9 @@ public class StockMovementConfiguration : IEntityTypeConfiguration<StockMovement
         builder.Property(sm => sm.UnitCostAtTransaction)
             .HasPrecision(18, 2);
 
-        builder.Property(sm => sm.RowVersion)
-            .IsRowVersion()
-            .IsConcurrencyToken()
-            .ValueGeneratedOnAddOrUpdate();
+        // Use PostgreSQL's xmin system column for optimistic concurrency
+        builder.UseXminAsConcurrencyToken();
+        builder.Ignore(sm => sm.RowVersion);
 
         // Indexes for common queries
         builder.HasIndex(sm => sm.ProductId);

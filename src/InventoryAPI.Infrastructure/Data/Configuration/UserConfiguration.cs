@@ -38,12 +38,11 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .IsRequired()
             .HasConversion<int>();
 
-        builder.Property(u => u.RowVersion)
-            .IsRowVersion()
-            .IsConcurrencyToken()
-            .ValueGeneratedOnAddOrUpdate();
+        // Use PostgreSQL's xmin system column for optimistic concurrency
+        builder.UseXminAsConcurrencyToken();
 
         builder.Ignore(u => u.FullName);
+        builder.Ignore(u => u.RowVersion);
 
         // Relationships
         builder.HasMany(u => u.RequestedWorkOrders)

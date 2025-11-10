@@ -461,26 +461,3 @@ else
         }
     }
 }
-
-// Simple text input dialog component (inline for now)
-@code {
-    public class SimpleTextDialog : ComponentBase
-    {
-        [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
-        [Parameter] public string Title { get; set; } = "Input";
-        [Parameter] public string Message { get; set; } = "";
-        [Parameter] public string Placeholder { get; set; } = "";
-
-        private string _inputValue = "";
-
-        private void Submit()
-        {
-            MudDialog.Close(DialogResult.Ok(_inputValue));
-        }
-
-        private void Cancel()
-        {
-            MudDialog.Cancel();
-        }
-    }
-}

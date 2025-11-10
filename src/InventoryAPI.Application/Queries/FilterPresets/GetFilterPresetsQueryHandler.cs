@@ -3,6 +3,7 @@ using InventoryAPI.Application.DTOs;
 using InventoryAPI.Application.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Http;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
 namespace InventoryAPI.Application.Queries.FilterPresets;
@@ -28,8 +29,8 @@ public class GetFilterPresetsQueryHandler : IRequestHandler<GetFilterPresetsQuer
 
     public async Task<List<FilterPresetDto>> Handle(GetFilterPresetsQuery request, CancellationToken cancellationToken)
     {
-        // Get current user ID
-        var userIdString = _httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        // Get current user ID from JWT claims
+        var userIdString = _httpContextAccessor.HttpContext?.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
         if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
         {
             throw new UnauthorizedAccessException("User not authenticated");

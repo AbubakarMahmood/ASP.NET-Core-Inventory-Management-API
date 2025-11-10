@@ -26,9 +26,9 @@ public class FilterPresetConfiguration : IEntityTypeConfiguration<FilterPreset>
         builder.Property(fp => fp.FilterData)
             .IsRequired();
 
-        // Use PostgreSQL's xmin system column for optimistic concurrency
-        builder.UseXminAsConcurrencyToken();
-        builder.Ignore(fp => fp.RowVersion);
+        // Configure optimistic concurrency with RowVersion
+        builder.Property(fp => fp.RowVersion)
+            .IsRowVersion();
 
         // Indexes for performance
         builder.HasIndex(fp => new { fp.UserId, fp.EntityType });

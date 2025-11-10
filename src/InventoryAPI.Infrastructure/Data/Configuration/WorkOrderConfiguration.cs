@@ -37,9 +37,9 @@ public class WorkOrderConfiguration : IEntityTypeConfiguration<WorkOrder>
             .IsRequired()
             .HasConversion<int>();
 
-        // Use PostgreSQL's xmin system column for optimistic concurrency
-        builder.UseXminAsConcurrencyToken();
-        builder.Ignore(wo => wo.RowVersion);
+        // Configure optimistic concurrency with RowVersion
+        builder.Property(wo => wo.RowVersion)
+            .IsRowVersion();
 
         // Indexes for common queries
         builder.HasIndex(wo => wo.Status);

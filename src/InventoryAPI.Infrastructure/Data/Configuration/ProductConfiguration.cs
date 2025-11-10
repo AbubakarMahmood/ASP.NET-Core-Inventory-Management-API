@@ -48,9 +48,9 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
             .IsRequired()
             .HasConversion<int>();
 
-        // Use PostgreSQL's xmin system column for optimistic concurrency
-        builder.UseXminAsConcurrencyToken();
-        builder.Ignore(p => p.RowVersion);
+        // Configure optimistic concurrency with RowVersion
+        builder.Property(p => p.RowVersion)
+            .IsRowVersion();
 
         // Indexes for common queries
         builder.HasIndex(p => p.Category);

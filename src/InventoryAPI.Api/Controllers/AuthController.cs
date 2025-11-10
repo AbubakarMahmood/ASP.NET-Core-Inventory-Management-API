@@ -62,11 +62,12 @@ public class AuthController : ControllerBase
     [HttpPost("refresh")]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<AuthResponse>> Refresh([FromBody] string refreshToken)
+    public Task<ActionResult<AuthResponse>> Refresh([FromBody] string refreshToken)
     {
         _logger.LogInformation("Token refresh attempt");
 
         // TODO: Implement refresh token logic
-        return StatusCode(StatusCodes.Status501NotImplemented, "Refresh token endpoint not yet implemented");
+        return Task.FromResult<ActionResult<AuthResponse>>(
+            StatusCode(StatusCodes.Status501NotImplemented, "Refresh token endpoint not yet implemented"));
     }
 }

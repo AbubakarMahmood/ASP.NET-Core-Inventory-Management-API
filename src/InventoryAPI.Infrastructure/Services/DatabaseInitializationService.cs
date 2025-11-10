@@ -1,4 +1,5 @@
 using InventoryAPI.Application.Interfaces;
+using InventoryAPI.Application.Models;
 using InventoryAPI.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -260,35 +261,4 @@ public class DatabaseInitializationService : IDatabaseInitializationService
         _logger.LogError("Failed to connect to database after {MaxRetries} attempts", maxRetries);
         return false;
     }
-}
-
-/// <summary>
-/// Result of database initialization
-/// </summary>
-public class DatabaseInitializationResult
-{
-    public bool Success { get; set; }
-    public bool CanConnect { get; set; }
-    public int PendingMigrationsCount { get; set; }
-    public List<string> PendingMigrations { get; set; } = new();
-    public bool MigrationsApplied { get; set; }
-    public string CurrentMigration { get; set; } = string.Empty;
-    public int TotalMigrationsApplied { get; set; }
-    public bool DataSeeded { get; set; }
-    public long InitializationTimeMs { get; set; }
-    public string? ErrorMessage { get; set; }
-}
-
-/// <summary>
-/// Current database status
-/// </summary>
-public class DatabaseStatus
-{
-    public bool IsHealthy { get; set; }
-    public bool CanConnect { get; set; }
-    public int PendingMigrationsCount { get; set; }
-    public string CurrentMigration { get; set; } = string.Empty;
-    public int TotalMigrationsApplied { get; set; }
-    public long ResponseTimeMs { get; set; }
-    public string? ErrorMessage { get; set; }
 }

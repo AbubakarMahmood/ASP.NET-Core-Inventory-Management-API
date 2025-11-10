@@ -85,17 +85,20 @@ The application comes with:
 
 ## 🐛 Common First-Run Issues
 
-### Issue: "Port 5432 already in use"
+### Issue: "Port 5433 already in use"
 
-**Cause:** PostgreSQL is already running on your system
+**Note:** The docker-compose.yml is pre-configured to use port 5433 on the host (instead of 5432) to avoid conflicts with locally-installed PostgreSQL.
 
-**Solution:**
+**If you still have a conflict:**
 ```powershell
-# Option 1: Stop local PostgreSQL service
-Stop-Service postgresql*
+# Find what's using port 5433
+netstat -ano | findstr :5433
 
-# Option 2: Change port in docker-compose.yml
-# Edit line 12: "5433:5432" instead of "5432:5432"
+# Kill the process (replace PID)
+taskkill /PID <PID> /F
+
+# Or change port in docker-compose.yml
+# Edit line 10: "5434:5432" instead of "5433:5432"
 ```
 
 ### Issue: "Docker containers won't start"
@@ -158,7 +161,7 @@ SELECT * FROM "WorkOrders";
 
 **With pgAdmin:**
 1. Open pgAdmin
-2. Connect to localhost:5432
+2. Connect to localhost:5433 (note: 5433, not 5432!)
 3. Database: inventorydb
 4. Username: inventoryuser
 5. Password: InventoryPass123!

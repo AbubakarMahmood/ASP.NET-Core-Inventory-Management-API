@@ -57,7 +57,7 @@ switch ($choice) {
         Write-Host "Access the application at:" -ForegroundColor Cyan
         Write-Host "  - Blazor UI:    http://localhost:3000" -ForegroundColor White
         Write-Host "  - API Swagger:  http://localhost:5000/swagger" -ForegroundColor White
-        Write-Host "  - PostgreSQL:   localhost:5432" -ForegroundColor White
+        Write-Host "  - PostgreSQL:   localhost:5433" -ForegroundColor White
         Write-Host ""
         Write-Host "Default credentials:" -ForegroundColor Cyan
         Write-Host "  Email:    admin@inventory.com" -ForegroundColor White
@@ -76,7 +76,7 @@ switch ($choice) {
             -e POSTGRES_DB=inventorydb `
             -e POSTGRES_USER=inventoryuser `
             -e POSTGRES_PASSWORD=InventoryPass123! `
-            -p 5432:5432 `
+            -p 5433:5432 `
             -d postgres:14-alpine
 
         Write-Host "✓ PostgreSQL started" -ForegroundColor Green

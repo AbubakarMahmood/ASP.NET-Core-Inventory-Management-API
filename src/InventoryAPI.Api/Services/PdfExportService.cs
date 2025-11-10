@@ -108,14 +108,13 @@ public class PdfExportService : IPdfExportService
 
                 page.Footer()
                     .AlignCenter()
+                    .DefaultTextStyle(x => x.FontSize(9).FontColor(Colors.Grey.Darken1))
                     .Text(text =>
                     {
                         text.Span("Page ");
                         text.CurrentPageNumber();
                         text.Span(" of ");
                         text.TotalPages();
-                        text.FontSize(9);
-                        text.FontColor(Colors.Grey.Darken1);
                     });
             });
         });

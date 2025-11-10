@@ -39,7 +39,9 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .HasConversion<int>();
 
         builder.Property(u => u.RowVersion)
-            .IsRowVersion();
+            .IsRowVersion()
+            .IsConcurrencyToken()
+            .ValueGeneratedOnAddOrUpdate();
 
         builder.Ignore(u => u.FullName);
 

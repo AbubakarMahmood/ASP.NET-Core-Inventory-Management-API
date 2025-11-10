@@ -49,7 +49,9 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
             .HasConversion<int>();
 
         builder.Property(p => p.RowVersion)
-            .IsRowVersion();
+            .IsRowVersion()
+            .IsConcurrencyToken()
+            .ValueGeneratedOnAddOrUpdate();
 
         // Indexes for common queries
         builder.HasIndex(p => p.Category);

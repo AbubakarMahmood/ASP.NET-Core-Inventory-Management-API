@@ -38,7 +38,9 @@ public class WorkOrderConfiguration : IEntityTypeConfiguration<WorkOrder>
             .HasConversion<int>();
 
         builder.Property(wo => wo.RowVersion)
-            .IsRowVersion();
+            .IsRowVersion()
+            .IsConcurrencyToken()
+            .ValueGeneratedOnAddOrUpdate();
 
         // Indexes for common queries
         builder.HasIndex(wo => wo.Status);

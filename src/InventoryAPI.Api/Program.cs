@@ -1,3 +1,4 @@
+// Build: 2025-11-10T02:43:40Z
 using System.Reflection;
 using System.Text;
 using FluentValidation;
@@ -194,7 +195,45 @@ if (app.Environment.IsDevelopment())
     {
         var context = services.GetRequiredService<ApplicationDbContext>();
         var passwordService = services.GetRequiredService<IPasswordService>();
-        await context.Database.MigrateAsync();
+
+        // Check if database needs to be created
+        var canConnect = await context.Database.CanConnectAsync();
+        if (canConnect)
+        {
+            // Check if Users table exists using a safer method
+            bool tablesExist = false;
+            try
+            {
+                // Try to query information_schema
+                using var command = context.Database.GetDbConnection().CreateCommand();
+                command.CommandText = @"SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = 'Users'
+                )";
+                await context.Database.OpenConnectionAsync();
+                var result = await command.ExecuteScalarAsync();
+                tablesExist = result != null && (bool)result;
+                await context.Database.CloseConnectionAsync();
+            }
+            catch
+            {
+                tablesExist = false;
+            }
+
+            if (!tablesExist)
+            {
+                Log.Information("Tables don't exist. Creating database schema...");
+                // Use EnsureCreated to create tables from DbContext model
+                await context.Database.EnsureCreatedAsync();
+                Log.Information("Database schema created successfully");
+            }
+            else
+            {
+                // Apply any pending migrations
+                await context.Database.MigrateAsync();
+            }
+        }
+
         await DatabaseSeeder.SeedAsync(context, passwordService);
         Log.Information("Database seeded successfully");
     }

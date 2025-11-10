@@ -48,6 +48,17 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.RowVersion)
             .IsRowVersion();
 
+        // Configure relationships
+        builder.HasMany(p => p.WorkOrderItems)
+            .WithOne(woi => woi.Product)
+            .HasForeignKey(woi => woi.ProductId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasMany(p => p.StockMovements)
+            .WithOne(sm => sm.Product)
+            .HasForeignKey(sm => sm.ProductId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // Indexes
         builder.HasIndex(p => p.SKU)
             .IsUnique();

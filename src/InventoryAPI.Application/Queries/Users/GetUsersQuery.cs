@@ -1,3 +1,4 @@
+using InventoryAPI.Application.Common;
 using InventoryAPI.Application.DTOs;
 using InventoryAPI.Domain.Enums;
 using MediatR;

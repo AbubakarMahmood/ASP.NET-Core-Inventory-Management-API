@@ -1,6 +1,6 @@
 using AutoMapper;
 using InventoryAPI.Application.DTOs;
-using InventoryAPI.Infrastructure.Interfaces;
+using InventoryAPI.Application.Interfaces;
 using MediatR;
 
 namespace InventoryAPI.Application.Commands.Users;

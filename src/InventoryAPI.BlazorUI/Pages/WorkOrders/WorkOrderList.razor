@@ -193,7 +193,7 @@
         </MudTd>
         <MudTd DataLabel="Requested By">@context.RequestedByName</MudTd>
         <MudTd DataLabel="Assigned To">@(context.AssignedToName ?? "-")</MudTd>
-        <MudTd DataLabel="Requested Date">@context.RequestedDate.ToString("yyyy-MM-dd")</MudTd>
+        <MudTd DataLabel="Requested Date">@context.CreatedAt.ToString("yyyy-MM-dd")</MudTd>
         <MudTd DataLabel="Items">@context.Items.Count item(s)</MudTd>
         <MudTd DataLabel="Actions">
             <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Primary" Href="@($"/work-orders/{context.Id}")" />

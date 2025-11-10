@@ -24,10 +24,10 @@
                 <MudGrid>
                     <!-- Product Selection -->
                     <MudItem xs="12">
-                        <MudSelect T="Guid?" @bind-Value="_model.ProductId" Label="Product" Required="true" RequiredError="Product is required" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.Inventory2">
+                        <MudSelect T="Guid" @bind-Value="_model.ProductId" Label="Product" Required="true" RequiredError="Product is required" Variant="Variant.Outlined" AdornmentIcon="@Icons.Material.Filled.Inventory2">
                             @foreach (var product in _products)
                             {
-                                <MudSelectItem T="Guid?" Value="@product.Id">
+                                <MudSelectItem T="Guid" Value="@product.Id">
                                     <MudStack Row="true" Justify="Justify.SpaceBetween">
                                         <MudText>@product.SKU - @product.Name</MudText>
                                         <MudChip Size="Size.Small" Color="@(product.IsLowStock ? Color.Warning : Color.Success)">
@@ -133,7 +133,7 @@
                 </MudAlert>
             }
 
-            <MudStack Row="true" Spacing="2" Justify="Justify.End">
+            <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd">
                 <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="NavigateBack" Disabled="@_isSubmitting">
                     Cancel
                 </MudButton>
@@ -294,7 +294,7 @@
 
     protected override void OnParametersSet()
     {
-        if (_model.ProductId.HasValue)
+        if (_model.ProductId != Guid.Empty)
         {
             OnProductChanged();
         }

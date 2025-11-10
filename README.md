@@ -422,6 +422,80 @@ The Swagger interface provides:
 - Try-it-out functionality
 - Authentication support
 
+## 🔧 Troubleshooting
+
+### Migration Error: "relation already exists"
+
+If you see this error when starting the API:
+```
+Npgsql.PostgresException: 42P07: relation "Users" already exists
+```
+
+**This means:** The database tables exist but the migration history is out of sync.
+
+**Solution 1: Fresh Start (Recommended if no important data)**
+```bash
+# Use the provided reset script
+./reset-database.sh
+
+# Or manually:
+docker-compose down -v
+docker-compose up --build
+```
+
+**Solution 2: Keep Existing Data**
+```bash
+# Connect to PostgreSQL
+docker exec -it inventory-postgres psql -U inventory_user -d inventory_db
+
+# Mark migration as applied
+INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+VALUES ('20251110020900_InitialCreate', '8.0.11');
+```
+
+### EF Core Warnings About Query Filters
+
+If you see warnings like:
+```
+Entity 'User' has a global query filter defined and is the required end of a relationship...
+```
+
+**Status:** These warnings have been fixed by adding proper entity configurations in version `v1.1.0+`.
+
+**To get the fix:**
+1. Pull the latest code
+2. Run `./reset-database.sh` to regenerate migrations
+3. Restart the containers
+
+### Port Already in Use
+
+If Docker fails with "port already allocated":
+```bash
+# Check what's using the ports
+netstat -ano | findstr :5000  # Windows
+lsof -i :5000                 # Linux/Mac
+
+# Change ports in docker-compose.yml or stop conflicting service
+```
+
+### Docker Permission Denied (Linux)
+
+```bash
+# Add user to docker group
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+### Cannot Connect to Database
+
+Ensure PostgreSQL container is running:
+```bash
+docker ps | grep inventory-postgres
+
+# View logs
+docker-compose logs postgres
+```
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please follow these guidelines:

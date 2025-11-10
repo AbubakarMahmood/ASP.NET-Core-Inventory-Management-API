@@ -33,10 +33,10 @@
     {
         MudDialog?.Close(new SavePresetResult { Name = PresetName, IsShared = IsShared });
     }
-}
 
-public class SavePresetResult
-{
-    public string Name { get; set; } = string.Empty;
-    public bool IsShared { get; set; }
+    public class SavePresetResult
+    {
+        public string Name { get; set; } = string.Empty;
+        public bool IsShared { get; set; }
+    }
 }

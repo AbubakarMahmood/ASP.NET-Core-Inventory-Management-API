@@ -17,12 +17,3 @@ public class StockMovementService
         return await _apiClient.GetAsync<PaginatedResult<StockMovementDto>>($"/api/v1/stock-movements?pageNumber={pageNumber}&pageSize={pageSize}");
     }
 }
-
-public class StockMovementDto
-{
-    public Guid Id { get; set; }
-    public Guid ProductId { get; set; }
-    public string Type { get; set; } = string.Empty;
-    public int Quantity { get; set; }
-    public DateTime Timestamp { get; set; }
-}

@@ -297,14 +297,3 @@
         NavigationManager.NavigateTo("/work-orders");
     }
 }
-
-// Placeholder ProductDto for now
-public class ProductDto
-{
-    public Guid Id { get; set; }
-    public string SKU { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public int CurrentStock { get; set; }
-    public int ReorderPoint { get; set; }
-    public bool IsLowStock => CurrentStock <= ReorderPoint;
-}

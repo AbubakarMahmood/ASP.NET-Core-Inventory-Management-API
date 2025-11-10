@@ -6,6 +6,7 @@ using InventoryAPI.Domain.Exceptions;
 using InventoryAPI.Application.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Http;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
 namespace InventoryAPI.Application.Commands.StockMovements;
@@ -112,7 +113,7 @@ public class RecordStockMovementCommandHandler : IRequestHandler<RecordStockMove
 
     private Guid GetCurrentUserId()
     {
-        var userIdClaim = _httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userIdClaim = _httpContextAccessor.HttpContext?.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
         if (Guid.TryParse(userIdClaim, out var userId))
         {
             return userId;

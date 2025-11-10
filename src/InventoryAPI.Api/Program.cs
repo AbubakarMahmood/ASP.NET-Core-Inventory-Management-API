@@ -46,9 +46,22 @@ builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
     .SetApplicationName("InventoryAPI");
 
-// Database
+// Database with connection resilience
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    options.UseNpgsql(connectionString, npgsqlOptions =>
+    {
+        // Enable automatic retry on transient failures
+        npgsqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorCodesToAdd: null);
+
+        // Command timeout for long-running migrations
+        npgsqlOptions.CommandTimeout(120);
+    });
+});
 
 // Register IApplicationDbContext interface for Clean Architecture
 builder.Services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
@@ -63,6 +76,7 @@ builder.Services.AddScoped<IPasswordService, PasswordService>();
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
 builder.Services.AddScoped<IPdfExportService, PdfExportService>();
 builder.Services.AddSingleton<INotificationService, NotificationService>();
+builder.Services.AddScoped<IDatabaseInitializationService, DatabaseInitializationService>();
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(MappingProfile));
@@ -180,9 +194,11 @@ builder.Services.AddSwaggerGen(c =>
     }
 });
 
-// Health checks
+// Health checks with detailed database status
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<ApplicationDbContext>();
+    .AddCheck<InventoryAPI.Api.HealthChecks.DatabaseHealthCheck>(
+        "database",
+        tags: new[] { "db", "sql", "ready" });
 
 var app = builder.Build();
 
@@ -195,40 +211,85 @@ if (app.Environment.IsDevelopment())
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Inventory API v1");
         c.RoutePrefix = "swagger";
     });
+}
 
-    // Seed database in development
-    using var scope = app.Services.CreateScope();
+// Initialize database with environment-aware strategy
+using (var scope = app.Services.CreateScope())
+{
     var services = scope.ServiceProvider;
+    var databaseService = services.GetRequiredService<IDatabaseInitializationService>();
+    var environment = services.GetRequiredService<IWebHostEnvironment>();
+
     try
     {
-        var context = services.GetRequiredService<ApplicationDbContext>();
-        var passwordService = services.GetRequiredService<IPasswordService>();
-
-        // Check if database needs to be created
-        var canConnect = await context.Database.CanConnectAsync();
-        if (canConnect)
+        if (environment.IsDevelopment())
         {
-            Log.Information("Checking for pending migrations...");
-            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+            Log.Information("=== DEVELOPMENT MODE: Initializing database ===");
+            var result = await databaseService.InitializeAsync();
 
-            if (pendingMigrations.Any())
+            if (result.Success)
             {
-                Log.Information($"Applying {pendingMigrations.Count()} pending migration(s)...");
-                await context.Database.MigrateAsync();
-                Log.Information("Database migrations applied successfully");
+                Log.Information("✓ Database initialization successful");
+                Log.Information("  - Connection: {Status}", result.CanConnect ? "Connected" : "Failed");
+                Log.Information("  - Current Migration: {Migration}", result.CurrentMigration);
+                Log.Information("  - Total Migrations Applied: {Count}", result.TotalMigrationsApplied);
+                if (result.MigrationsApplied)
+                {
+                    Log.Information("  - New Migrations Applied: {Count}", result.PendingMigrationsCount);
+                }
+                if (result.DataSeeded)
+                {
+                    Log.Information("  - Seed Data: Processed");
+                }
+                Log.Information("  - Initialization Time: {Time}ms", result.InitializationTimeMs);
             }
             else
             {
-                Log.Information("Database is up to date. No migrations needed.");
+                Log.Warning("⚠ Database initialization completed with warnings");
+                Log.Warning("  - Error: {Error}", result.ErrorMessage ?? "Unknown");
+                Log.Warning("  - Application will start but database functionality may be limited");
             }
         }
+        else
+        {
+            Log.Information("=== PRODUCTION MODE: Verifying database ===");
+            var result = await databaseService.VerifyAsync();
 
-        await DatabaseSeeder.SeedAsync(context, passwordService);
-        Log.Information("Database seeded successfully");
+            if (!result.Success)
+            {
+                Log.Fatal("✗ PRODUCTION STARTUP BLOCKED: Database verification failed");
+                Log.Fatal("  - Error: {Error}", result.ErrorMessage ?? "Unknown");
+                Log.Fatal("  - Action Required: Apply pending migrations before starting the application");
+
+                if (result.PendingMigrations.Any())
+                {
+                    Log.Fatal("  - Pending Migrations: {Migrations}",
+                        string.Join(", ", result.PendingMigrations));
+                    Log.Fatal("  - Run: dotnet ef database update --project src/InventoryAPI.Infrastructure --startup-project src/InventoryAPI.Api");
+                }
+
+                throw new InvalidOperationException(
+                    "Database is not ready for production. " +
+                    "Apply all pending migrations before starting the application.");
+            }
+
+            Log.Information("✓ Database verification successful");
+            Log.Information("  - Current Migration: {Migration}", result.CurrentMigration);
+            Log.Information("  - Total Migrations: {Count}", result.TotalMigrationsApplied);
+            Log.Information("  - Pending Migrations: {Count}", result.PendingMigrationsCount);
+            Log.Information("  - Verification Time: {Time}ms", result.InitializationTimeMs);
+        }
+    }
+    catch (Exception ex) when (environment.IsProduction())
+    {
+        // In production, fail fast if database is not ready
+        Log.Fatal(ex, "FATAL: Production startup failed due to database issues");
+        throw;
     }
     catch (Exception ex)
     {
-        Log.Error(ex, "An error occurred while seeding the database");
+        // In development, log but continue (for better DX)
+        Log.Error(ex, "Database initialization encountered an error, but application will continue");
     }
 }
 

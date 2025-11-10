@@ -47,8 +47,23 @@ This API provides comprehensive inventory tracking and work order management cap
 - **Request/Response Logging**: Full observability with Serilog
 - **Optimistic Concurrency**: Row version-based conflict detection
 - **Soft Deletes**: Data preservation with global query filters
-- **Health Checks**: Monitoring and diagnostics endpoints
+- **Health Checks**: Comprehensive monitoring and diagnostics endpoints
 - **Pagination & Filtering**: Efficient data retrieval for all collections
+
+### 🎯 Production-Ready Database Management
+- **Automatic Connection Resilience**: Built-in retry logic with exponential backoff (5 attempts, 30s max delay)
+- **Environment-Aware Initialization**:
+  - **Development**: Automatic migrations + seeding for rapid iteration
+  - **Production**: Fail-fast verification with detailed error reporting
+- **Comprehensive Health Checks**: `/api/v1/health` with detailed database status including:
+  - Connection status and response time
+  - Current migration version
+  - Pending migrations count
+  - Database health indicators
+- **Database Status Endpoint**: `/api/v1/database/status` for programmatic monitoring
+- **Transaction Safety**: All migrations executed within transactions with automatic rollback on failure
+- **Detailed Logging**: Full audit trail of initialization, migrations, and errors
+- **Deployment Scripts**: Ready-to-use bash scripts for backup, migration, and health checks
 
 ## 🛠️ Tech Stack
 
@@ -230,9 +245,11 @@ GET    /api/v1/reports/stock-valuation   # Inventory valuation report
 GET    /api/v1/reports/movement-summary  # Stock movement summary
 ```
 
-### System
+### System & Monitoring
 ```
-GET    /api/v1/health             # Health check endpoint
+GET    /api/v1/health             # Comprehensive health check with DB status
+GET    /api/v1/database/status    # Detailed database status (public)
+POST   /api/v1/database/verify    # Verify database readiness (Admin only)
 ```
 
 ## 🔐 Authentication
@@ -385,7 +402,106 @@ dotnet ef database update PreviousMigrationName -p src/InventoryAPI.Infrastructu
 
 ## 🚀 Deployment
 
-### Docker
+### Quick Deployment with Docker Compose
+
+```bash
+# Complete stack (API + PostgreSQL + UI)
+docker-compose up -d --build
+
+# Access the API
+curl http://localhost:5000/api/v1/health
+```
+
+### Production Deployment
+
+For production deployments, use the provided deployment scripts and comprehensive documentation:
+
+#### 📚 **Complete Deployment Documentation**
+
+- **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Complete production deployment guide covering:
+  - All deployment scenarios (fresh install, updates, zero-downtime)
+  - Database migration strategies
+  - Rollback procedures
+  - Health check monitoring
+  - Troubleshooting guide
+
+- **[MIGRATIONS.md](docs/MIGRATIONS.md)** - Database migrations guide with:
+  - Creating and managing migrations
+  - Migration best practices
+  - Common scenarios and examples
+  - Troubleshooting tips
+
+#### 🔧 **Automated Deployment Scripts** (`scripts/`)
+
+```bash
+# Create database backup
+./scripts/backup-database.sh
+
+# Apply database migrations (Production)
+./scripts/migrate-database.sh Production
+
+# Run health checks
+./scripts/health-check.sh
+
+# Complete production deployment workflow
+./scripts/deploy-production.sh
+```
+
+See [scripts/README.md](scripts/README.md) for detailed script documentation.
+
+#### 🎯 **Environment-Aware Behavior**
+
+The application intelligently handles database initialization based on the environment:
+
+**Development Mode** (`ASPNETCORE_ENVIRONMENT=Development`):
+- ✅ Automatically applies pending migrations
+- ✅ Seeds sample data
+- ✅ Continues on database errors (better DX)
+- ✅ Logs detailed initialization steps
+
+**Production Mode** (`ASPNETCORE_ENVIRONMENT=Production`):
+- ✅ Verifies database is ready (fail-fast)
+- ✅ **Blocks startup** if migrations pending
+- ✅ Requires manual migration before deployment
+- ✅ Prevents accidental data changes
+
+#### 📊 **Health Check Endpoints**
+
+Monitor your deployment with comprehensive health checks:
+
+```bash
+# Basic health check
+curl http://localhost:5000/api/v1/health
+
+# Response:
+{
+  "status": "Healthy",
+  "database": {
+    "status": "Connected",
+    "currentMigration": "20250110154530_InitialCreate",
+    "totalMigrations": 1,
+    "pendingMigrations": 0,
+    "responseTimeMs": 45
+  }
+}
+
+# Detailed database status
+curl http://localhost:5000/api/v1/database/status | jq
+
+# Admin verification (requires auth)
+curl -H "Authorization: Bearer <token>" \
+  -X POST http://localhost:5000/api/v1/database/verify
+```
+
+#### 🔄 **Connection Resilience**
+
+Built-in automatic retry logic handles transient connection failures:
+- **5 retry attempts** with exponential backoff
+- **Maximum delay**: 30 seconds
+- **Command timeout**: 120 seconds for migrations
+- Automatic reconnection on network glitches
+
+### Docker Deployment
 
 ```bash
 # Build image
@@ -394,20 +510,59 @@ docker build -t inventory-api:latest .
 # Run container
 docker run -d \
   -p 5000:80 \
+  -e ASPNETCORE_ENVIRONMENT=Production \
   -e ConnectionStrings__DefaultConnection="Host=postgres;Database=inventorydb;Username=user;Password=pass" \
-  -e JwtSettings__SecretKey="your-secret-key" \
+  -e JwtSettings__SecretKey="your-secret-key-min-32-chars" \
   --name inventory-api \
   inventory-api:latest
 ```
 
+### Kubernetes Deployment
+
+Example health check configuration:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: 80
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /api/v1/database/status
+    port: 80
+  initialDelaySeconds: 10
+  periodSeconds: 5
+```
+
 ### Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `ConnectionStrings__DefaultConnection` | PostgreSQL connection string | Yes |
-| `JwtSettings__SecretKey` | JWT signing key (min 32 chars) | Yes |
-| `JwtSettings__ExpiryMinutes` | Token expiration time | No |
-| `Serilog__MinimumLevel` | Logging level | No |
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `ASPNETCORE_ENVIRONMENT` | Environment (Development/Production) | Yes | Development |
+| `ConnectionStrings__DefaultConnection` | PostgreSQL connection string | Yes | - |
+| `JwtSettings__SecretKey` | JWT signing key (min 32 chars) | Yes | - |
+| `JwtSettings__Issuer` | JWT issuer | No | InventoryAPI |
+| `JwtSettings__Audience` | JWT audience | No | InventoryAPIUsers |
+| `JwtSettings__ExpiryMinutes` | Token expiration time | No | 60 |
+| `Serilog__MinimumLevel__Default` | Logging level | No | Information |
+
+### Pre-Deployment Checklist
+
+Before deploying to production:
+
+- [ ] Database backup created
+- [ ] Migrations reviewed and tested
+- [ ] Environment variables configured
+- [ ] Secrets properly secured (use Key Vault/Secrets Manager)
+- [ ] Health check endpoints verified
+- [ ] Monitoring and alerts configured
+- [ ] Rollback plan documented
+- [ ] All tests passing
+
+See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for the complete production deployment guide.
 
 ## 📝 API Documentation
 
@@ -421,6 +576,80 @@ The Swagger interface provides:
 - Request/response schemas
 - Try-it-out functionality
 - Authentication support
+
+## 🔧 Troubleshooting
+
+### Migration Error: "relation already exists"
+
+If you see this error when starting the API:
+```
+Npgsql.PostgresException: 42P07: relation "Users" already exists
+```
+
+**This means:** The database tables exist but the migration history is out of sync.
+
+**Solution 1: Fresh Start (Recommended if no important data)**
+```bash
+# Use the provided reset script
+./reset-database.sh
+
+# Or manually:
+docker-compose down -v
+docker-compose up --build
+```
+
+**Solution 2: Keep Existing Data**
+```bash
+# Connect to PostgreSQL
+docker exec -it inventory-postgres psql -U inventory_user -d inventory_db
+
+# Mark migration as applied
+INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+VALUES ('20251110020900_InitialCreate', '8.0.11');
+```
+
+### EF Core Warnings About Query Filters
+
+If you see warnings like:
+```
+Entity 'User' has a global query filter defined and is the required end of a relationship...
+```
+
+**Status:** These warnings have been fixed by adding proper entity configurations in version `v1.1.0+`.
+
+**To get the fix:**
+1. Pull the latest code
+2. Run `./reset-database.sh` to regenerate migrations
+3. Restart the containers
+
+### Port Already in Use
+
+If Docker fails with "port already allocated":
+```bash
+# Check what's using the ports
+netstat -ano | findstr :5000  # Windows
+lsof -i :5000                 # Linux/Mac
+
+# Change ports in docker-compose.yml or stop conflicting service
+```
+
+### Docker Permission Denied (Linux)
+
+```bash
+# Add user to docker group
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+### Cannot Connect to Database
+
+Ensure PostgreSQL container is running:
+```bash
+docker ps | grep inventory-postgres
+
+# View logs
+docker-compose logs postgres
+```
 
 ## 🤝 Contributing
 

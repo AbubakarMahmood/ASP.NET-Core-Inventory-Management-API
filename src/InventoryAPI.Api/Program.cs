@@ -34,9 +34,15 @@ builder.Services.AddControllers();
 // SignalR
 builder.Services.AddSignalR();
 
+// HttpContextAccessor (needed for accessing current user in handlers)
+builder.Services.AddHttpContextAccessor();
+
 // Database
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Register IApplicationDbContext interface for Clean Architecture
+builder.Services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
 
 // Repositories
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();

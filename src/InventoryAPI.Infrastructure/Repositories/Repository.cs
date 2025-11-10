@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Domain.Common;
 using InventoryAPI.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +9,7 @@ namespace InventoryAPI.Infrastructure.Repositories;
 /// <summary>
 /// Generic repository implementation
 /// </summary>
-public class Repository<T> : IRepository<T> where T : BaseEntity
+public class Repository<T> : IRepository<T> where T : class
 {
     protected readonly ApplicationDbContext _context;
     protected readonly DbSet<T> _dbSet;

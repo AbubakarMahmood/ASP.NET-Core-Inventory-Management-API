@@ -11,10 +11,10 @@ namespace InventoryAPI.Application.Queries.Users;
 /// </summary>
 public class GetUserByIdQueryHandler : IRequestHandler<GetUserByIdQuery, UserDto?>
 {
-    private readonly ApplicationDbContext _context;
+    private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
 
-    public GetUserByIdQueryHandler(ApplicationDbContext context, IMapper mapper)
+    public GetUserByIdQueryHandler(IApplicationDbContext context, IMapper mapper)
     {
         _context = context;
         _mapper = mapper;

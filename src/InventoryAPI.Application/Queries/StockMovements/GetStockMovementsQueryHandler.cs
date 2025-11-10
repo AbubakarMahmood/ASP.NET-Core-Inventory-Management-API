@@ -9,10 +9,10 @@ namespace InventoryAPI.Application.Queries.StockMovements;
 
 public class GetStockMovementsQueryHandler : IRequestHandler<GetStockMovementsQuery, PaginatedResult<StockMovementDto>>
 {
-    private readonly ApplicationDbContext _context;
+    private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
 
-    public GetStockMovementsQueryHandler(ApplicationDbContext context, IMapper mapper)
+    public GetStockMovementsQueryHandler(IApplicationDbContext context, IMapper mapper)
     {
         _context = context;
         _mapper = mapper;

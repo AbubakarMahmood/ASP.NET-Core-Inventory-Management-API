@@ -1,7 +1,7 @@
 using InventoryAPI.Application.DTOs;
 using InventoryAPI.Domain.Exceptions;
-using InventoryAPI.Infrastructure.Repositories;
-using InventoryAPI.Infrastructure.Services;
+using InventoryAPI.Application.Interfaces;
+using InventoryAPI.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;

@@ -1,4 +1,5 @@
 using System.Reflection;
+using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Domain.Common;
 using InventoryAPI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +9,7 @@ namespace InventoryAPI.Infrastructure.Data;
 /// <summary>
 /// Main application database context
 /// </summary>
-public class ApplicationDbContext : DbContext
+public class ApplicationDbContext : DbContext, IApplicationDbContext
 {
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
@@ -21,6 +22,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<WorkOrderItem> WorkOrderItems => Set<WorkOrderItem>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<FilterPreset> FilterPresets => Set<FilterPreset>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

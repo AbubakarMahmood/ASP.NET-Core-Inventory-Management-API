@@ -11,10 +11,10 @@ namespace InventoryAPI.Application.Queries.WorkOrders;
 /// </summary>
 public class GetWorkOrdersQueryHandler : IRequestHandler<GetWorkOrdersQuery, PaginatedResult<WorkOrderDto>>
 {
-    private readonly ApplicationDbContext _context;
+    private readonly IApplicationDbContext _context;
     private readonly IMapper _mapper;
 
-    public GetWorkOrdersQueryHandler(ApplicationDbContext context, IMapper mapper)
+    public GetWorkOrdersQueryHandler(IApplicationDbContext context, IMapper mapper)
     {
         _context = context;
         _mapper = mapper;

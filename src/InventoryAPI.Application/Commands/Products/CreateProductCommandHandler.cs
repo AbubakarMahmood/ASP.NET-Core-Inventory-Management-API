@@ -2,7 +2,7 @@ using AutoMapper;
 using InventoryAPI.Application.DTOs;
 using InventoryAPI.Domain.Entities;
 using InventoryAPI.Domain.Exceptions;
-using InventoryAPI.Infrastructure.Repositories;
+using InventoryAPI.Application.Interfaces;
 using MediatR;
 
 namespace InventoryAPI.Application.Commands.Products;

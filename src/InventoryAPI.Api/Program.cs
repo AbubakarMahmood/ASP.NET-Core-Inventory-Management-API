@@ -199,16 +199,32 @@ if (app.Environment.IsDevelopment())
         var canConnect = await context.Database.CanConnectAsync();
         if (canConnect)
         {
-            // Check if tables exist
-            var tablesExist = await context.Database.ExecuteSqlRawAsync(
-                @"SELECT 1 FROM information_schema.tables
-                  WHERE table_schema = 'public' AND table_name = 'Users' LIMIT 1") >= 0;
+            // Check if Users table exists using a safer method
+            bool tablesExist = false;
+            try
+            {
+                // Try to query information_schema
+                using var command = context.Database.GetDbConnection().CreateCommand();
+                command.CommandText = @"SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = 'Users'
+                )";
+                await context.Database.OpenConnectionAsync();
+                var result = await command.ExecuteScalarAsync();
+                tablesExist = result != null && (bool)result;
+                await context.Database.CloseConnectionAsync();
+            }
+            catch
+            {
+                tablesExist = false;
+            }
 
             if (!tablesExist)
             {
                 Log.Information("Tables don't exist. Creating database schema...");
-                // Use EnsureCreated as fallback if migrations don't work
+                // Use EnsureCreated to create tables from DbContext model
                 await context.Database.EnsureCreatedAsync();
+                Log.Information("Database schema created successfully");
             }
             else
             {

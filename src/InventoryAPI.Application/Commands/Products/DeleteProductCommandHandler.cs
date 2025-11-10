@@ -1,4 +1,4 @@
-using InventoryAPI.Application.Exceptions;
+using InventoryAPI.Domain.Exceptions;
 using InventoryAPI.Application.Interfaces;
 using MediatR;
 

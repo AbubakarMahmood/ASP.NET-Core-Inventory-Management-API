@@ -1,6 +1,6 @@
 using AutoMapper;
 using InventoryAPI.Application.DTOs;
-using InventoryAPI.Application.Exceptions;
+using InventoryAPI.Domain.Exceptions;
 using InventoryAPI.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;

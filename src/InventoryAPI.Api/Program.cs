@@ -194,7 +194,29 @@ if (app.Environment.IsDevelopment())
     {
         var context = services.GetRequiredService<ApplicationDbContext>();
         var passwordService = services.GetRequiredService<IPasswordService>();
-        await context.Database.MigrateAsync();
+
+        // Check if database needs to be created
+        var canConnect = await context.Database.CanConnectAsync();
+        if (canConnect)
+        {
+            // Check if tables exist
+            var tablesExist = await context.Database.ExecuteSqlRawAsync(
+                @"SELECT 1 FROM information_schema.tables
+                  WHERE table_schema = 'public' AND table_name = 'Users' LIMIT 1") >= 0;
+
+            if (!tablesExist)
+            {
+                Log.Information("Tables don't exist. Creating database schema...");
+                // Use EnsureCreated as fallback if migrations don't work
+                await context.Database.EnsureCreatedAsync();
+            }
+            else
+            {
+                // Apply any pending migrations
+                await context.Database.MigrateAsync();
+            }
+        }
+
         await DatabaseSeeder.SeedAsync(context, passwordService);
         Log.Information("Database seeded successfully");
     }

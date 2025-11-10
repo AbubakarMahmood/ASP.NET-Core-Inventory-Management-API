@@ -24,8 +24,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\InventoryAPI.Application\InventoryAPI.Application.csproj" />
-    <ProjectReference Include="..\..\src\InventoryAPI.Domain\InventoryAPI.Domain.csproj" />
+    <ProjectReference Include="../../src/InventoryAPI.Application/InventoryAPI.Application.csproj" />
+    <ProjectReference Include="../../src/InventoryAPI.Domain/InventoryAPI.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>

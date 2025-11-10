@@ -14,7 +14,6 @@ public interface IApplicationDbContext
     DbSet<WorkOrderItem> WorkOrderItems { get; }
     DbSet<StockMovement> StockMovements { get; }
     DbSet<FilterPreset> FilterPresets { get; }
-    DbSet<AuditLog> AuditLogs { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

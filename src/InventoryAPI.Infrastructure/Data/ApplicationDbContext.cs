@@ -22,7 +22,6 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<WorkOrderItem> WorkOrderItems => Set<WorkOrderItem>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<FilterPreset> FilterPresets => Set<FilterPreset>();
-    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

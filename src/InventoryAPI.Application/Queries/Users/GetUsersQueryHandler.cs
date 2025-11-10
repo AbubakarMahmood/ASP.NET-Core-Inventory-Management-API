@@ -1,3 +1,5 @@
+using InventoryAPI.Application.Interfaces;
+using InventoryAPI.Application.Common;
 using AutoMapper;
 using InventoryAPI.Application.DTOs;
 using InventoryAPI.Infrastructure.Data;

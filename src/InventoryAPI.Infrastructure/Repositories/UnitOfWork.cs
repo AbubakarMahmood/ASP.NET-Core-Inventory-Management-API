@@ -18,7 +18,7 @@ public class UnitOfWork : IUnitOfWork
         _context = context;
         Users = new Repository<User>(_context);
         Products = new Repository<Product>(_context);
-        WorkOrders = new Repository<WorkOrder>(_context);
+        WorkOrders = new WorkOrderRepository(_context);
         WorkOrderItems = new Repository<WorkOrderItem>(_context);
         StockMovements = new Repository<StockMovement>(_context);
         FilterPresets = new Repository<FilterPreset>(_context);
@@ -26,7 +26,7 @@ public class UnitOfWork : IUnitOfWork
 
     public IRepository<User> Users { get; }
     public IRepository<Product> Products { get; }
-    public IRepository<WorkOrder> WorkOrders { get; }
+    public IWorkOrderRepository WorkOrders { get; }
     public IRepository<WorkOrderItem> WorkOrderItems { get; }
     public IRepository<StockMovement> StockMovements { get; }
     public IRepository<FilterPreset> FilterPresets { get; }

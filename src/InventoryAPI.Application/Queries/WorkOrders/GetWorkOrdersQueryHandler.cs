@@ -153,7 +153,7 @@ public class GetWorkOrdersQueryHandler : IRequestHandler<GetWorkOrdersQuery, Pag
             "status" => descending ? query.OrderByDescending(w => w.Status) : query.OrderBy(w => w.Status),
             "priority" => descending ? query.OrderByDescending(w => w.Priority) : query.OrderBy(w => w.Priority),
             "createdat" => descending ? query.OrderByDescending(w => w.CreatedAt) : query.OrderBy(w => w.CreatedAt),
-            "requesteddate" => descending ? query.OrderByDescending(w => w.RequestedDate) : query.OrderBy(w => w.RequestedDate),
+            "requesteddate" => descending ? query.OrderByDescending(w => w.CreatedAt) : query.OrderBy(w => w.CreatedAt),
             "completeddate" => descending ? query.OrderByDescending(w => w.CompletedDate) : query.OrderBy(w => w.CompletedDate),
             _ => descending ? query.OrderByDescending(w => w.CreatedAt) : query.OrderBy(w => w.CreatedAt)
         };
@@ -170,7 +170,7 @@ public class GetWorkOrdersQueryHandler : IRequestHandler<GetWorkOrdersQuery, Pag
             "status" => descending ? query.ThenByDescending(w => w.Status) : query.ThenBy(w => w.Status),
             "priority" => descending ? query.ThenByDescending(w => w.Priority) : query.ThenBy(w => w.Priority),
             "createdat" => descending ? query.ThenByDescending(w => w.CreatedAt) : query.ThenBy(w => w.CreatedAt),
-            "requesteddate" => descending ? query.ThenByDescending(w => w.RequestedDate) : query.ThenBy(w => w.RequestedDate),
+            "requesteddate" => descending ? query.ThenByDescending(w => w.CreatedAt) : query.ThenBy(w => w.CreatedAt),
             "completeddate" => descending ? query.ThenByDescending(w => w.CompletedDate) : query.ThenBy(w => w.CompletedDate),
             _ => descending ? query.ThenByDescending(w => w.CreatedAt) : query.ThenBy(w => w.CreatedAt)
         };

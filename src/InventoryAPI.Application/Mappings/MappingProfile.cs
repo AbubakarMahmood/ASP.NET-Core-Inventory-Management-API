@@ -1,6 +1,7 @@
 using AutoMapper;
 using InventoryAPI.Application.Commands.Products;
 using InventoryAPI.Application.Commands.StockMovements;
+using InventoryAPI.Application.Commands.WorkOrders;
 using InventoryAPI.Application.DTOs;
 using InventoryAPI.Domain.Entities;
 

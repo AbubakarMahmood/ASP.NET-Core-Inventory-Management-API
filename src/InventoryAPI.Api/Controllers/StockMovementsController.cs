@@ -130,8 +130,8 @@ public class StockMovementsController : ControllerBase
         var result = await _mediator.Send(command, cancellationToken);
 
         _logger.LogInformation(
-            "Stock movement recorded successfully: {MovementId}, New stock level: {CurrentStock}",
-            result.Id, result.CurrentStock);
+            "Stock movement recorded successfully: {MovementId}",
+            result.Id);
 
         return CreatedAtAction(
             nameof(GetStockMovements),

@@ -108,15 +108,15 @@ public class PdfExportService : IPdfExportService
 
                 page.Footer()
                     .AlignCenter()
-                    .Text(x =>
+                    .Text(text =>
                     {
-                        x.Span("Page ");
-                        x.CurrentPageNumber();
-                        x.Span(" of ");
-                        x.TotalPages();
-                    })
-                    .FontSize(9)
-                    .FontColor(Colors.Grey.Darken1);
+                        text.Span("Page ");
+                        text.CurrentPageNumber();
+                        text.Span(" of ");
+                        text.TotalPages();
+                        text.FontSize(9);
+                        text.FontColor(Colors.Grey.Darken1);
+                    });
             });
         });
 

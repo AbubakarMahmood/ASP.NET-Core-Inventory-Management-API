@@ -68,10 +68,6 @@ public class ExceptionHandlingMiddleware
                 response.StatusCode = (int)HttpStatusCode.BadRequest;
                 break;
 
-            case InsufficientStockException:
-                response.StatusCode = (int)HttpStatusCode.BadRequest;
-                break;
-
             case UnauthorizedAccessException:
                 response.StatusCode = (int)HttpStatusCode.Unauthorized;
                 break;

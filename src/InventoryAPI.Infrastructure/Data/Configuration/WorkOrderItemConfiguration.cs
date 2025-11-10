@@ -18,9 +18,9 @@ public class WorkOrderItemConfiguration : IEntityTypeConfiguration<WorkOrderItem
         builder.Property(woi => woi.Notes)
             .HasMaxLength(500);
 
-        // Use PostgreSQL's xmin system column for optimistic concurrency
-        builder.UseXminAsConcurrencyToken();
-        builder.Ignore(woi => woi.RowVersion);
+        // Configure optimistic concurrency with RowVersion
+        builder.Property(woi => woi.RowVersion)
+            .IsRowVersion();
 
         // Composite index for common queries
         builder.HasIndex(woi => new { woi.WorkOrderId, woi.ProductId });

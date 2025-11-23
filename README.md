@@ -579,6 +579,31 @@ The Swagger interface provides:
 
 ## 🔧 Troubleshooting
 
+### Database Error: "column RowVersion does not exist"
+
+If you see this error when trying to login or access the API:
+```
+Npgsql.PostgresException: 42703: column u.RowVersion does not exist
+```
+
+**This means:** The database schema is missing the `RowVersion` column that's required for optimistic concurrency control.
+
+**Quick Fix (Recommended):**
+```bash
+# Use the automated fix script
+chmod +x fix-database.sh
+./fix-database.sh
+
+# Then restart the API
+docker-compose restart api
+```
+
+**Manual Fix Options:**
+- See [DATABASE_FIX_README.md](DATABASE_FIX_README.md) for detailed fix instructions
+- Or use `./reset-database.sh` for a complete fresh start (will reset all data)
+
+This issue typically occurs when the database was created without proper EF Core migrations.
+
 ### Migration Error: "relation already exists"
 
 If you see this error when starting the API:

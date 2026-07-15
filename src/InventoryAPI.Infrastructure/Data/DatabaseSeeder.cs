@@ -11,15 +11,7 @@ public static class DatabaseSeeder
 {
     public static async Task SeedAsync(ApplicationDbContext context, IPasswordService passwordService)
     {
-        // Ensure database and tables exist
-        try
-        {
-            await context.Database.EnsureCreatedAsync();
-        }
-        catch
-        {
-            // Tables may already exist, continue
-        }
+        // Schema is created by migrations before seeding runs
 
         // Seed Users
         if (!context.Users.Any())

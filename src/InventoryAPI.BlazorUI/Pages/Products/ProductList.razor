@@ -70,7 +70,7 @@
                           Variant="Variant.Outlined"
                           Adornment="Adornment.End"
                           AdornmentIcon="@Icons.Material.Filled.Search"
-                          OnKeyUp="@((e) => { if (e.Key == "Enter") SearchAsync(); })" />
+                          OnKeyUp="@(async (e) => { if (e.Key == "Enter") await SearchAsync(); })" />
         </MudItem>
         <MudItem xs="12" md="3">
             <MudSelect @bind-Value="_selectedCategory"

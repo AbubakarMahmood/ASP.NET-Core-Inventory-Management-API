@@ -21,4 +21,9 @@ public class ProductDto
     public CostingMethod CostingMethod { get; set; }
     public bool IsLowStock { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// Concurrency token. Send it back on update so conflicting edits are detected.
+    /// </summary>
+    public uint Version { get; set; }
 }

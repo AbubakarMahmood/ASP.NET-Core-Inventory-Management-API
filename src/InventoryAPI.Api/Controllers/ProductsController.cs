@@ -125,10 +125,8 @@ public class ProductsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ProductDto>> UpdateProduct(Guid id, [FromBody] UpdateProductCommand command)
     {
-        if (id != command.Id)
-        {
-            return BadRequest("ID in URL does not match ID in request body");
-        }
+        // The route identifies the resource; the body doesn't need to repeat it
+        command.Id = id;
 
         _logger.LogInformation("Updating product with ID: {Id}", id);
 

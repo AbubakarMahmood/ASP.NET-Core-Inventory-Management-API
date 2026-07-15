@@ -10,4 +10,9 @@ public interface ITokenService
     string GenerateAccessToken(User user);
     string GenerateRefreshToken();
     DateTime GetRefreshTokenExpiryTime();
+
+    /// <summary>
+    /// Lifetime of issued access tokens, in minutes
+    /// </summary>
+    int AccessTokenLifetimeMinutes { get; }
 }

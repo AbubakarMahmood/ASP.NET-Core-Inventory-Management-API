@@ -72,6 +72,11 @@ public class ExceptionHandlingMiddleware
                 response.StatusCode = (int)HttpStatusCode.Unauthorized;
                 break;
 
+            case Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException:
+                response.StatusCode = (int)HttpStatusCode.Conflict;
+                errorResponse.Message = "The record was modified by another user. Please refresh and try again.";
+                break;
+
             default:
                 response.StatusCode = (int)HttpStatusCode.InternalServerError;
                 errorResponse.Message = "An internal server error occurred";

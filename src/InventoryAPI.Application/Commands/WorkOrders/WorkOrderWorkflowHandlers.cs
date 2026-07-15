@@ -1,9 +1,11 @@
-using AutoMapper;
 using InventoryAPI.Application.DTOs;
 using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Domain.Entities;
 using InventoryAPI.Domain.Enums;
+using InventoryAPI.Domain.Exceptions;
 using MediatR;
+
+using InventoryAPI.Application.Mappings;
 
 namespace InventoryAPI.Application.Commands.WorkOrders;
 
@@ -13,70 +15,30 @@ namespace InventoryAPI.Application.Commands.WorkOrders;
 public class SubmitWorkOrderCommandHandler : IRequestHandler<SubmitWorkOrderCommand, WorkOrderDto>
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IMapper _mapper;
     private readonly INotificationService _notificationService;
 
-    public SubmitWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper, INotificationService notificationService)
+    public SubmitWorkOrderCommandHandler(IUnitOfWork unitOfWork, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
-        _mapper = mapper;
         _notificationService = notificationService;
     }
 
     public async Task<WorkOrderDto> Handle(SubmitWorkOrderCommand request, CancellationToken cancellationToken)
     {
         var workOrder = await _unitOfWork.WorkOrders.GetByIdWithDetailsAsync(request.WorkOrderId, cancellationToken)
-            ?? throw new KeyNotFoundException($"Work order {request.WorkOrderId} not found");
+            ?? throw new NotFoundException(nameof(WorkOrder), request.WorkOrderId);
 
         workOrder.Submit();
 
         _unitOfWork.WorkOrders.Update(workOrder);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Send real-time notification
         await _notificationService.SendWorkOrderNotificationAsync(
             workOrder.OrderNumber,
             "Submitted",
             $"Work order {workOrder.OrderNumber} has been submitted for approval");
 
-        return await MapToDto(workOrder, cancellationToken);
-    }
-
-    private async Task<WorkOrderDto> MapToDto(WorkOrder workOrder, CancellationToken cancellationToken)
-    {
-        var dto = _mapper.Map<WorkOrderDto>(workOrder);
-
-        var requestedBy = await _unitOfWork.Users.GetByIdAsync(workOrder.RequestedById, cancellationToken);
-        dto.RequestedByName = requestedBy?.FullName ?? "Unknown";
-        dto.RequestedByEmail = requestedBy?.Email ?? "";
-
-        if (workOrder.AssignedToId.HasValue)
-        {
-            var assignedTo = await _unitOfWork.Users.GetByIdAsync(workOrder.AssignedToId.Value, cancellationToken);
-            dto.AssignedToName = assignedTo?.FullName;
-            dto.AssignedToEmail = assignedTo?.Email;
-        }
-
-        dto.Items = new List<WorkOrderItemDto>();
-        foreach (var item in workOrder.Items)
-        {
-            var product = await _unitOfWork.Products.GetByIdAsync(item.ProductId, cancellationToken);
-            dto.Items.Add(new WorkOrderItemDto
-            {
-                Id = item.Id,
-                WorkOrderId = item.WorkOrderId,
-                ProductId = item.ProductId,
-                ProductSKU = product?.SKU ?? "",
-                ProductName = product?.Name ?? "",
-                UnitOfMeasure = product?.UnitOfMeasure ?? "",
-                CurrentStock = product?.CurrentStock ?? 0,
-                QuantityRequested = item.QuantityRequested,
-                QuantityIssued = item.QuantityIssued,
-                Notes = item.Notes
-            });
-        }
-
-        return dto;
+        return workOrder.ToDto();
     }
 }
 
@@ -86,74 +48,34 @@ public class SubmitWorkOrderCommandHandler : IRequestHandler<SubmitWorkOrderComm
 public class ApproveWorkOrderCommandHandler : IRequestHandler<ApproveWorkOrderCommand, WorkOrderDto>
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IMapper _mapper;
     private readonly INotificationService _notificationService;
 
-    public ApproveWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper, INotificationService notificationService)
+    public ApproveWorkOrderCommandHandler(IUnitOfWork unitOfWork, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
-        _mapper = mapper;
         _notificationService = notificationService;
     }
 
     public async Task<WorkOrderDto> Handle(ApproveWorkOrderCommand request, CancellationToken cancellationToken)
     {
         var workOrder = await _unitOfWork.WorkOrders.GetByIdWithDetailsAsync(request.WorkOrderId, cancellationToken)
-            ?? throw new KeyNotFoundException($"Work order {request.WorkOrderId} not found");
+            ?? throw new NotFoundException(nameof(WorkOrder), request.WorkOrderId);
 
-        // Validate assigned user exists
         var assignedUser = await _unitOfWork.Users.GetByIdAsync(request.AssignedToId, cancellationToken)
-            ?? throw new KeyNotFoundException($"User {request.AssignedToId} not found");
+            ?? throw new NotFoundException(nameof(User), request.AssignedToId);
 
         workOrder.Approve(request.AssignedToId);
+        workOrder.AssignedTo = assignedUser;
 
         _unitOfWork.WorkOrders.Update(workOrder);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Send real-time notification
         await _notificationService.SendWorkOrderNotificationAsync(
             workOrder.OrderNumber,
             "Approved",
             $"Work order {workOrder.OrderNumber} has been approved and assigned to {assignedUser.FullName}");
 
-        return await MapToDto(workOrder, cancellationToken);
-    }
-
-    private async Task<WorkOrderDto> MapToDto(WorkOrder workOrder, CancellationToken cancellationToken)
-    {
-        var dto = _mapper.Map<WorkOrderDto>(workOrder);
-
-        var requestedBy = await _unitOfWork.Users.GetByIdAsync(workOrder.RequestedById, cancellationToken);
-        dto.RequestedByName = requestedBy?.FullName ?? "Unknown";
-        dto.RequestedByEmail = requestedBy?.Email ?? "";
-
-        if (workOrder.AssignedToId.HasValue)
-        {
-            var assignedTo = await _unitOfWork.Users.GetByIdAsync(workOrder.AssignedToId.Value, cancellationToken);
-            dto.AssignedToName = assignedTo?.FullName;
-            dto.AssignedToEmail = assignedTo?.Email;
-        }
-
-        dto.Items = new List<WorkOrderItemDto>();
-        foreach (var item in workOrder.Items)
-        {
-            var product = await _unitOfWork.Products.GetByIdAsync(item.ProductId, cancellationToken);
-            dto.Items.Add(new WorkOrderItemDto
-            {
-                Id = item.Id,
-                WorkOrderId = item.WorkOrderId,
-                ProductId = item.ProductId,
-                ProductSKU = product?.SKU ?? "",
-                ProductName = product?.Name ?? "",
-                UnitOfMeasure = product?.UnitOfMeasure ?? "",
-                CurrentStock = product?.CurrentStock ?? 0,
-                QuantityRequested = item.QuantityRequested,
-                QuantityIssued = item.QuantityIssued,
-                Notes = item.Notes
-            });
-        }
-
-        return dto;
+        return workOrder.ToDto();
     }
 }
 
@@ -163,63 +85,30 @@ public class ApproveWorkOrderCommandHandler : IRequestHandler<ApproveWorkOrderCo
 public class RejectWorkOrderCommandHandler : IRequestHandler<RejectWorkOrderCommand, WorkOrderDto>
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IMapper _mapper;
     private readonly INotificationService _notificationService;
 
-    public RejectWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper, INotificationService notificationService)
+    public RejectWorkOrderCommandHandler(IUnitOfWork unitOfWork, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
-        _mapper = mapper;
         _notificationService = notificationService;
     }
 
     public async Task<WorkOrderDto> Handle(RejectWorkOrderCommand request, CancellationToken cancellationToken)
     {
         var workOrder = await _unitOfWork.WorkOrders.GetByIdWithDetailsAsync(request.WorkOrderId, cancellationToken)
-            ?? throw new KeyNotFoundException($"Work order {request.WorkOrderId} not found");
+            ?? throw new NotFoundException(nameof(WorkOrder), request.WorkOrderId);
 
         workOrder.Reject(request.Reason);
 
         _unitOfWork.WorkOrders.Update(workOrder);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Send real-time notification
         await _notificationService.SendWorkOrderNotificationAsync(
             workOrder.OrderNumber,
             "Rejected",
-            $"Work order {workOrder.OrderNumber} has been rejected");
+            $"Work order {workOrder.OrderNumber} has been rejected: {workOrder.RejectionReason}");
 
-        return await MapToDto(workOrder, cancellationToken);
-    }
-
-    private async Task<WorkOrderDto> MapToDto(WorkOrder workOrder, CancellationToken cancellationToken)
-    {
-        var dto = _mapper.Map<WorkOrderDto>(workOrder);
-
-        var requestedBy = await _unitOfWork.Users.GetByIdAsync(workOrder.RequestedById, cancellationToken);
-        dto.RequestedByName = requestedBy?.FullName ?? "Unknown";
-        dto.RequestedByEmail = requestedBy?.Email ?? "";
-
-        dto.Items = new List<WorkOrderItemDto>();
-        foreach (var item in workOrder.Items)
-        {
-            var product = await _unitOfWork.Products.GetByIdAsync(item.ProductId, cancellationToken);
-            dto.Items.Add(new WorkOrderItemDto
-            {
-                Id = item.Id,
-                WorkOrderId = item.WorkOrderId,
-                ProductId = item.ProductId,
-                ProductSKU = product?.SKU ?? "",
-                ProductName = product?.Name ?? "",
-                UnitOfMeasure = product?.UnitOfMeasure ?? "",
-                CurrentStock = product?.CurrentStock ?? 0,
-                QuantityRequested = item.QuantityRequested,
-                QuantityIssued = item.QuantityIssued,
-                Notes = item.Notes
-            });
-        }
-
-        return dto;
+        return workOrder.ToDto();
     }
 }
 
@@ -229,66 +118,30 @@ public class RejectWorkOrderCommandHandler : IRequestHandler<RejectWorkOrderComm
 public class StartWorkOrderCommandHandler : IRequestHandler<StartWorkOrderCommand, WorkOrderDto>
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IMapper _mapper;
     private readonly INotificationService _notificationService;
 
-    public StartWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper, INotificationService notificationService)
+    public StartWorkOrderCommandHandler(IUnitOfWork unitOfWork, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
-        _mapper = mapper;
         _notificationService = notificationService;
     }
 
     public async Task<WorkOrderDto> Handle(StartWorkOrderCommand request, CancellationToken cancellationToken)
     {
         var workOrder = await _unitOfWork.WorkOrders.GetByIdWithDetailsAsync(request.WorkOrderId, cancellationToken)
-            ?? throw new KeyNotFoundException($"Work order {request.WorkOrderId} not found");
+            ?? throw new NotFoundException(nameof(WorkOrder), request.WorkOrderId);
 
         workOrder.Start();
 
         _unitOfWork.WorkOrders.Update(workOrder);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await _notificationService.SendWorkOrderNotificationAsync(workOrder.OrderNumber, "Started", $"Work order {workOrder.OrderNumber} is now in progress");
+        await _notificationService.SendWorkOrderNotificationAsync(
+            workOrder.OrderNumber,
+            "Started",
+            $"Work order {workOrder.OrderNumber} is now in progress");
 
-        return await MapToDto(workOrder, cancellationToken);
-    }
-
-    private async Task<WorkOrderDto> MapToDto(WorkOrder workOrder, CancellationToken cancellationToken)
-    {
-        var dto = _mapper.Map<WorkOrderDto>(workOrder);
-
-        var requestedBy = await _unitOfWork.Users.GetByIdAsync(workOrder.RequestedById, cancellationToken);
-        dto.RequestedByName = requestedBy?.FullName ?? "Unknown";
-        dto.RequestedByEmail = requestedBy?.Email ?? "";
-
-        if (workOrder.AssignedToId.HasValue)
-        {
-            var assignedTo = await _unitOfWork.Users.GetByIdAsync(workOrder.AssignedToId.Value, cancellationToken);
-            dto.AssignedToName = assignedTo?.FullName;
-            dto.AssignedToEmail = assignedTo?.Email;
-        }
-
-        dto.Items = new List<WorkOrderItemDto>();
-        foreach (var item in workOrder.Items)
-        {
-            var product = await _unitOfWork.Products.GetByIdAsync(item.ProductId, cancellationToken);
-            dto.Items.Add(new WorkOrderItemDto
-            {
-                Id = item.Id,
-                WorkOrderId = item.WorkOrderId,
-                ProductId = item.ProductId,
-                ProductSKU = product?.SKU ?? "",
-                ProductName = product?.Name ?? "",
-                UnitOfMeasure = product?.UnitOfMeasure ?? "",
-                CurrentStock = product?.CurrentStock ?? 0,
-                QuantityRequested = item.QuantityRequested,
-                QuantityIssued = item.QuantityIssued,
-                Notes = item.Notes
-            });
-        }
-
-        return dto;
+        return workOrder.ToDto();
     }
 }
 
@@ -298,66 +151,30 @@ public class StartWorkOrderCommandHandler : IRequestHandler<StartWorkOrderComman
 public class CompleteWorkOrderCommandHandler : IRequestHandler<CompleteWorkOrderCommand, WorkOrderDto>
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IMapper _mapper;
     private readonly INotificationService _notificationService;
 
-    public CompleteWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper, INotificationService notificationService)
+    public CompleteWorkOrderCommandHandler(IUnitOfWork unitOfWork, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
-        _mapper = mapper;
         _notificationService = notificationService;
     }
 
     public async Task<WorkOrderDto> Handle(CompleteWorkOrderCommand request, CancellationToken cancellationToken)
     {
         var workOrder = await _unitOfWork.WorkOrders.GetByIdWithDetailsAsync(request.WorkOrderId, cancellationToken)
-            ?? throw new KeyNotFoundException($"Work order {request.WorkOrderId} not found");
+            ?? throw new NotFoundException(nameof(WorkOrder), request.WorkOrderId);
 
         workOrder.Complete();
 
         _unitOfWork.WorkOrders.Update(workOrder);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await _notificationService.SendWorkOrderNotificationAsync(workOrder.OrderNumber, "Completed", $"Work order {workOrder.OrderNumber} has been completed");
+        await _notificationService.SendWorkOrderNotificationAsync(
+            workOrder.OrderNumber,
+            "Completed",
+            $"Work order {workOrder.OrderNumber} has been completed");
 
-        return await MapToDto(workOrder, cancellationToken);
-    }
-
-    private async Task<WorkOrderDto> MapToDto(WorkOrder workOrder, CancellationToken cancellationToken)
-    {
-        var dto = _mapper.Map<WorkOrderDto>(workOrder);
-
-        var requestedBy = await _unitOfWork.Users.GetByIdAsync(workOrder.RequestedById, cancellationToken);
-        dto.RequestedByName = requestedBy?.FullName ?? "Unknown";
-        dto.RequestedByEmail = requestedBy?.Email ?? "";
-
-        if (workOrder.AssignedToId.HasValue)
-        {
-            var assignedTo = await _unitOfWork.Users.GetByIdAsync(workOrder.AssignedToId.Value, cancellationToken);
-            dto.AssignedToName = assignedTo?.FullName;
-            dto.AssignedToEmail = assignedTo?.Email;
-        }
-
-        dto.Items = new List<WorkOrderItemDto>();
-        foreach (var item in workOrder.Items)
-        {
-            var product = await _unitOfWork.Products.GetByIdAsync(item.ProductId, cancellationToken);
-            dto.Items.Add(new WorkOrderItemDto
-            {
-                Id = item.Id,
-                WorkOrderId = item.WorkOrderId,
-                ProductId = item.ProductId,
-                ProductSKU = product?.SKU ?? "",
-                ProductName = product?.Name ?? "",
-                UnitOfMeasure = product?.UnitOfMeasure ?? "",
-                CurrentStock = product?.CurrentStock ?? 0,
-                QuantityRequested = item.QuantityRequested,
-                QuantityIssued = item.QuantityIssued,
-                Notes = item.Notes
-            });
-        }
-
-        return dto;
+        return workOrder.ToDto();
     }
 }
 
@@ -367,177 +184,100 @@ public class CompleteWorkOrderCommandHandler : IRequestHandler<CompleteWorkOrder
 public class CancelWorkOrderCommandHandler : IRequestHandler<CancelWorkOrderCommand, WorkOrderDto>
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IMapper _mapper;
     private readonly INotificationService _notificationService;
 
-    public CancelWorkOrderCommandHandler(IUnitOfWork unitOfWork, IMapper mapper, INotificationService notificationService)
+    public CancelWorkOrderCommandHandler(IUnitOfWork unitOfWork, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
-        _mapper = mapper;
         _notificationService = notificationService;
     }
 
     public async Task<WorkOrderDto> Handle(CancelWorkOrderCommand request, CancellationToken cancellationToken)
     {
         var workOrder = await _unitOfWork.WorkOrders.GetByIdWithDetailsAsync(request.WorkOrderId, cancellationToken)
-            ?? throw new KeyNotFoundException($"Work order {request.WorkOrderId} not found");
+            ?? throw new NotFoundException(nameof(WorkOrder), request.WorkOrderId);
 
         workOrder.Cancel();
 
         _unitOfWork.WorkOrders.Update(workOrder);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await _notificationService.SendWorkOrderNotificationAsync(workOrder.OrderNumber, "Cancelled", $"Work order {workOrder.OrderNumber} has been cancelled");
+        await _notificationService.SendWorkOrderNotificationAsync(
+            workOrder.OrderNumber,
+            "Cancelled",
+            $"Work order {workOrder.OrderNumber} has been cancelled");
 
-        return await MapToDto(workOrder, cancellationToken);
-    }
-
-    private async Task<WorkOrderDto> MapToDto(WorkOrder workOrder, CancellationToken cancellationToken)
-    {
-        var dto = _mapper.Map<WorkOrderDto>(workOrder);
-
-        var requestedBy = await _unitOfWork.Users.GetByIdAsync(workOrder.RequestedById, cancellationToken);
-        dto.RequestedByName = requestedBy?.FullName ?? "Unknown";
-        dto.RequestedByEmail = requestedBy?.Email ?? "";
-
-        if (workOrder.AssignedToId.HasValue)
-        {
-            var assignedTo = await _unitOfWork.Users.GetByIdAsync(workOrder.AssignedToId.Value, cancellationToken);
-            dto.AssignedToName = assignedTo?.FullName;
-            dto.AssignedToEmail = assignedTo?.Email;
-        }
-
-        dto.Items = new List<WorkOrderItemDto>();
-        foreach (var item in workOrder.Items)
-        {
-            var product = await _unitOfWork.Products.GetByIdAsync(item.ProductId, cancellationToken);
-            dto.Items.Add(new WorkOrderItemDto
-            {
-                Id = item.Id,
-                WorkOrderId = item.WorkOrderId,
-                ProductId = item.ProductId,
-                ProductSKU = product?.SKU ?? "",
-                ProductName = product?.Name ?? "",
-                UnitOfMeasure = product?.UnitOfMeasure ?? "",
-                CurrentStock = product?.CurrentStock ?? 0,
-                QuantityRequested = item.QuantityRequested,
-                QuantityIssued = item.QuantityIssued,
-                Notes = item.Notes
-            });
-        }
-
-        return dto;
+        return workOrder.ToDto();
     }
 }
 
 /// <summary>
-/// Handler for issuing items from a work order (creates stock movements)
+/// Handler for issuing items from a work order. Creates the stock movements,
+/// decrements product stock, and updates issued quantities in one atomic save.
 /// </summary>
 public class IssueWorkOrderItemsCommandHandler : IRequestHandler<IssueWorkOrderItemsCommand, WorkOrderDto>
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IMapper _mapper;
-    private readonly IMediator _mediator;
+    private readonly ICurrentUserService _currentUser;
 
-    public IssueWorkOrderItemsCommandHandler(IUnitOfWork unitOfWork, IMapper mapper, IMediator mediator)
+    public IssueWorkOrderItemsCommandHandler(IUnitOfWork unitOfWork, ICurrentUserService currentUser)
     {
         _unitOfWork = unitOfWork;
-        _mapper = mapper;
-        _mediator = mediator;
+        _currentUser = currentUser;
     }
 
     public async Task<WorkOrderDto> Handle(IssueWorkOrderItemsCommand request, CancellationToken cancellationToken)
     {
         var workOrder = await _unitOfWork.WorkOrders.GetByIdWithDetailsAsync(request.WorkOrderId, cancellationToken)
-            ?? throw new KeyNotFoundException($"Work order {request.WorkOrderId} not found");
+            ?? throw new NotFoundException(nameof(WorkOrder), request.WorkOrderId);
 
         if (workOrder.Status != WorkOrderStatus.InProgress)
         {
-            throw new InvalidOperationException("Only in-progress work orders can have items issued");
+            throw new BusinessRuleViolationException("Only in-progress work orders can have items issued.");
         }
 
-        await _unitOfWork.BeginTransactionAsync(cancellationToken);
+        var userId = _currentUser.RequireUserId();
 
-        try
+        foreach (var issueRequest in request.Items)
         {
-            foreach (var issueRequest in request.Items)
+            var item = workOrder.Items.FirstOrDefault(i => i.ProductId == issueRequest.ProductId)
+                ?? throw new NotFoundException(
+                    $"Product {issueRequest.ProductId} is not part of work order {workOrder.OrderNumber}.");
+
+            if (issueRequest.Quantity <= 0)
             {
-                // Find the work order item
-                var item = workOrder.Items.FirstOrDefault(i => i.ProductId == issueRequest.ProductId)
-                    ?? throw new KeyNotFoundException($"Product {issueRequest.ProductId} not found in work order");
-
-                // Validate quantity
-                if (item.QuantityIssued + issueRequest.Quantity > item.QuantityRequested)
-                {
-                    throw new InvalidOperationException(
-                        $"Cannot issue {issueRequest.Quantity} units. Remaining: {item.QuantityRequested - item.QuantityIssued}");
-                }
-
-                // Create stock movement (Issue type)
-                var stockMovementCommand = new StockMovements.RecordStockMovementCommand
-                {
-                    ProductId = issueRequest.ProductId,
-                    Type = StockMovementType.Issue,
-                    Quantity = issueRequest.Quantity,
-                    SourceLocation = issueRequest.FromLocation ?? string.Empty,
-                    Reason = $"Issued for Work Order {workOrder.OrderNumber}",
-                    Reference = workOrder.OrderNumber,
-                    WorkOrderId = workOrder.Id
-                };
-
-                await _mediator.Send(stockMovementCommand, cancellationToken);
-
-                // Update quantity issued
-                item.QuantityIssued += issueRequest.Quantity;
+                throw new BusinessRuleViolationException("Issue quantity must be greater than zero.");
             }
 
-            _unitOfWork.WorkOrders.Update(workOrder);
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            await _unitOfWork.CommitTransactionAsync(cancellationToken);
-
-            return await MapToDto(workOrder, cancellationToken);
-        }
-        catch
-        {
-            await _unitOfWork.RollbackTransactionAsync(cancellationToken);
-            throw;
-        }
-    }
-
-    private async Task<WorkOrderDto> MapToDto(WorkOrder workOrder, CancellationToken cancellationToken)
-    {
-        var dto = _mapper.Map<WorkOrderDto>(workOrder);
-
-        var requestedBy = await _unitOfWork.Users.GetByIdAsync(workOrder.RequestedById, cancellationToken);
-        dto.RequestedByName = requestedBy?.FullName ?? "Unknown";
-        dto.RequestedByEmail = requestedBy?.Email ?? "";
-
-        if (workOrder.AssignedToId.HasValue)
-        {
-            var assignedTo = await _unitOfWork.Users.GetByIdAsync(workOrder.AssignedToId.Value, cancellationToken);
-            dto.AssignedToName = assignedTo?.FullName;
-            dto.AssignedToEmail = assignedTo?.Email;
-        }
-
-        dto.Items = new List<WorkOrderItemDto>();
-        foreach (var item in workOrder.Items)
-        {
-            var product = await _unitOfWork.Products.GetByIdAsync(item.ProductId, cancellationToken);
-            dto.Items.Add(new WorkOrderItemDto
+            var remaining = item.QuantityRequested - item.QuantityIssued;
+            if (issueRequest.Quantity > remaining)
             {
-                Id = item.Id,
-                WorkOrderId = item.WorkOrderId,
+                throw new BusinessRuleViolationException(
+                    $"Cannot issue {issueRequest.Quantity} units of {item.Product.SKU}. Remaining: {remaining}.");
+            }
+
+            // Throws InsufficientStockException when stock would go negative.
+            item.Product.AdjustStock(-issueRequest.Quantity);
+            item.QuantityIssued += issueRequest.Quantity;
+
+            await _unitOfWork.StockMovements.AddAsync(new StockMovement
+            {
                 ProductId = item.ProductId,
-                ProductSKU = product?.SKU ?? "",
-                ProductName = product?.Name ?? "",
-                UnitOfMeasure = product?.UnitOfMeasure ?? "",
-                CurrentStock = product?.CurrentStock ?? 0,
-                QuantityRequested = item.QuantityRequested,
-                QuantityIssued = item.QuantityIssued,
-                Notes = item.Notes
-            });
+                Type = StockMovementType.Issue,
+                Quantity = issueRequest.Quantity,
+                SourceLocation = issueRequest.FromLocation ?? item.Product.Location,
+                Reason = $"Issued for work order {workOrder.OrderNumber}",
+                Reference = workOrder.OrderNumber,
+                WorkOrderId = workOrder.Id,
+                PerformedById = userId,
+                Timestamp = DateTime.UtcNow,
+                UnitCostAtTransaction = item.Product.UnitCost
+            }, cancellationToken);
         }
 
-        return dto;
+        _unitOfWork.WorkOrders.Update(workOrder);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return workOrder.ToDto();
     }
 }

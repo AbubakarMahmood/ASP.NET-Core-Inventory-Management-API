@@ -1,9 +1,10 @@
 using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Application.Common;
-using AutoMapper;
 using InventoryAPI.Application.DTOs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+
+using InventoryAPI.Application.Mappings;
 
 namespace InventoryAPI.Application.Queries.Users;
 
@@ -13,12 +14,10 @@ namespace InventoryAPI.Application.Queries.Users;
 public class GetUsersQueryHandler : IRequestHandler<GetUsersQuery, PaginatedResult<UserDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public GetUsersQueryHandler(IApplicationDbContext context, IMapper mapper)
+    public GetUsersQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<PaginatedResult<UserDto>> Handle(GetUsersQuery request, CancellationToken cancellationToken)
@@ -56,7 +55,7 @@ public class GetUsersQueryHandler : IRequestHandler<GetUsersQuery, PaginatedResu
             .ToListAsync(cancellationToken);
 
         // Map to DTOs
-        var userDtos = _mapper.Map<List<UserDto>>(users);
+        var userDtos = users.Select(x => x.ToDto()).ToList();
 
         return new PaginatedResult<UserDto>(
             userDtos,

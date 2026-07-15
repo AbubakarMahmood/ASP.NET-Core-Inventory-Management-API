@@ -1,9 +1,10 @@
-using AutoMapper;
 using InventoryAPI.Application.DTOs;
 using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Domain.Exceptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+
+using InventoryAPI.Application.Mappings;
 
 namespace InventoryAPI.Application.Commands.Products;
 
@@ -13,12 +14,10 @@ namespace InventoryAPI.Application.Commands.Products;
 public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand, ProductDto>
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IMapper _mapper;
 
-    public UpdateProductCommandHandler(IUnitOfWork unitOfWork, IMapper mapper)
+    public UpdateProductCommandHandler(IUnitOfWork unitOfWork)
     {
         _unitOfWork = unitOfWork;
-        _mapper = mapper;
     }
 
     public async Task<ProductDto> Handle(UpdateProductCommand request, CancellationToken cancellationToken)
@@ -40,7 +39,14 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
             throw new ValidationException("SKU", "Product with this SKU already exists");
         }
 
-        // Update properties
+        // Reject stale edits: the client sends back the Version it read, and a
+        // mismatch means someone else changed the product in the meantime.
+        if (request.Version.HasValue && request.Version.Value != product.Version)
+        {
+            throw new ValidationException("Version",
+                "The product has been modified by another user. Please refresh and try again.");
+        }
+
         product.SKU = request.SKU;
         product.Name = request.Name;
         product.Description = request.Description;
@@ -53,20 +59,19 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
         product.Location = request.Location;
         product.CostingMethod = request.CostingMethod;
 
-        // Note: Optimistic concurrency is handled automatically by EF Core
-        // using PostgreSQL's xmin (configured in ProductConfiguration)
-        // When SaveChangesAsync is called, EF Core will detect concurrent modifications
-
         try
         {
+            // EF compares against xmin on save, closing the race window between
+            // the check above and the write.
             _unitOfWork.Products.Update(product);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
-            throw new ValidationException("RowVersion", "The product has been modified by another user. Please refresh and try again.");
+            throw new ValidationException("Version",
+                "The product has been modified by another user. Please refresh and try again.");
         }
 
-        return _mapper.Map<ProductDto>(product);
+        return product.ToDto();
     }
 }

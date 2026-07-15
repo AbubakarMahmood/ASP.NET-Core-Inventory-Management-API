@@ -27,9 +27,6 @@ public class FilterPresetConfiguration : IEntityTypeConfiguration<FilterPreset>
         builder.Property(fp => fp.FilterData)
             .IsRequired();
 
-        builder.Property(fp => fp.RowVersion)
-            .IsRowVersion();
-
         // Configure relationships
         builder.HasOne(fp => fp.User)
             .WithMany()

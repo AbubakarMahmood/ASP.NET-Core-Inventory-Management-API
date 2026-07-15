@@ -1,5 +1,6 @@
 using InventoryAPI.Domain.Common;
 using InventoryAPI.Domain.Enums;
+using InventoryAPI.Domain.Exceptions;
 
 namespace InventoryAPI.Domain.Entities;
 
@@ -29,8 +30,10 @@ public class Product : BaseAuditableEntity
 
     public void AdjustStock(int quantity)
     {
-        CurrentStock += quantity;
-        if (CurrentStock < 0)
-            CurrentStock = 0;
+        var newStock = CurrentStock + quantity;
+        if (newStock < 0)
+            throw new InsufficientStockException(Id, CurrentStock, -quantity);
+
+        CurrentStock = newStock;
     }
 }

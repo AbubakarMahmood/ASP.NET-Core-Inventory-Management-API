@@ -1,17 +1,17 @@
 using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Domain.Entities;
 using InventoryAPI.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore;
 
 namespace InventoryAPI.Infrastructure.Repositories;
 
 /// <summary>
-/// Unit of Work implementation
+/// Unit of Work implementation over the EF Core DbContext.
+/// The context is owned and disposed by the DI container.
 /// </summary>
 public class UnitOfWork : IUnitOfWork
 {
     private readonly ApplicationDbContext _context;
-    private IDbContextTransaction? _transaction;
 
     public UnitOfWork(ApplicationDbContext context)
     {
@@ -36,49 +36,29 @@ public class UnitOfWork : IUnitOfWork
         return await _context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task BeginTransactionAsync(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Runs the operation inside an explicit transaction. Wrapped in the
+    /// execution strategy because the context is configured with
+    /// EnableRetryOnFailure, which does not allow user-initiated transactions
+    /// outside of it.
+    /// </summary>
+    public Task ExecuteInTransactionAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken = default)
     {
-        _transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
-    }
+        var strategy = _context.Database.CreateExecutionStrategy();
 
-    public async Task CommitTransactionAsync(CancellationToken cancellationToken = default)
-    {
-        try
+        return strategy.ExecuteAsync(async ct =>
         {
-            await _context.SaveChangesAsync(cancellationToken);
-            if (_transaction != null)
+            await using var transaction = await _context.Database.BeginTransactionAsync(ct);
+            try
             {
-                await _transaction.CommitAsync(cancellationToken);
+                await operation(ct);
+                await transaction.CommitAsync(ct);
             }
-        }
-        catch
-        {
-            await RollbackTransactionAsync(cancellationToken);
-            throw;
-        }
-        finally
-        {
-            if (_transaction != null)
+            catch
             {
-                await _transaction.DisposeAsync();
-                _transaction = null;
+                await transaction.RollbackAsync(ct);
+                throw;
             }
-        }
-    }
-
-    public async Task RollbackTransactionAsync(CancellationToken cancellationToken = default)
-    {
-        if (_transaction != null)
-        {
-            await _transaction.RollbackAsync(cancellationToken);
-            await _transaction.DisposeAsync();
-            _transaction = null;
-        }
-    }
-
-    public void Dispose()
-    {
-        _transaction?.Dispose();
-        _context.Dispose();
+        }, cancellationToken);
     }
 }

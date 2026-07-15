@@ -17,7 +17,8 @@ public class ApiClient
         _localStorage = localStorage;
         _jsonOptions = new JsonSerializerOptions
         {
-            PropertyNameCaseInsensitive = true
+            PropertyNameCaseInsensitive = true,
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
         };
     }
 

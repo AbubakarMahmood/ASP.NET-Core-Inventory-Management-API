@@ -22,9 +22,12 @@ public interface IRepository<T> where T : class
 }
 
 /// <summary>
-/// Unit of Work pattern for transaction management
+/// Unit of Work pattern for coordinating repository changes.
+/// A single <see cref="SaveChangesAsync"/> call is atomic; use
+/// <see cref="ExecuteInTransactionAsync"/> when multiple save points must
+/// commit or roll back together.
 /// </summary>
-public interface IUnitOfWork : IDisposable
+public interface IUnitOfWork
 {
     IRepository<User> Users { get; }
     IRepository<Product> Products { get; }
@@ -34,7 +37,10 @@ public interface IUnitOfWork : IDisposable
     IRepository<FilterPreset> FilterPresets { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
-    Task BeginTransactionAsync(CancellationToken cancellationToken = default);
-    Task CommitTransactionAsync(CancellationToken cancellationToken = default);
-    Task RollbackTransactionAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs <paramref name="operation"/> inside a database transaction that is
+    /// compatible with the configured retrying execution strategy.
+    /// </summary>
+    Task ExecuteInTransactionAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken = default);
 }

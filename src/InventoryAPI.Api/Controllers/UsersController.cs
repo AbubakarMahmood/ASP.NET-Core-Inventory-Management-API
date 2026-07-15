@@ -120,10 +120,8 @@ public class UsersController : ControllerBase
         [FromBody] UpdateUserCommand command,
         CancellationToken cancellationToken = default)
     {
-        if (id != command.UserId)
-        {
-            return BadRequest(new { message = "User ID mismatch" });
-        }
+        // The route identifies the resource; the body doesn't need to repeat it
+        command.UserId = id;
 
         _logger.LogInformation("Updating user {UserId}", id);
 

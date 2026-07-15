@@ -1,4 +1,3 @@
-// Build: 2025-11-10T02:43:40Z
 using System.Reflection;
 using System.Text;
 using FluentValidation;
@@ -6,7 +5,6 @@ using InventoryAPI.Api.Middleware;
 using InventoryAPI.Api.Services;
 using InventoryAPI.Application.Behaviors;
 using InventoryAPI.Application.Interfaces;
-using InventoryAPI.Application.Mappings;
 using InventoryAPI.Infrastructure.Data;
 using InventoryAPI.Infrastructure.Repositories;
 using InventoryAPI.Infrastructure.Services;
@@ -20,7 +18,7 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Serilog
+// Serilog
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
@@ -30,17 +28,21 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
-// Add services to the container
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Accept and emit enum names ("Receipt") rather than bare numbers
+        options.JsonSerializerOptions.Converters.Add(
+            new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 
-// SignalR
 builder.Services.AddSignalR();
 
-// HttpContextAccessor (needed for accessing current user in handlers)
 builder.Services.AddHttpContextAccessor();
 
-// Data Protection - Persist keys to a directory that survives container restarts
-var dataProtectionPath = Path.Combine("/app", "data-protection-keys");
+// Data protection keys persist across restarts (path is configurable for containers)
+var dataProtectionPath = builder.Configuration["DataProtection:KeysPath"]
+    ?? Path.Combine(builder.Environment.ContentRootPath, "data-protection-keys");
 Directory.CreateDirectory(dataProtectionPath);
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
@@ -52,18 +54,15 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
     options.UseNpgsql(connectionString, npgsqlOptions =>
     {
-        // Enable automatic retry on transient failures
         npgsqlOptions.EnableRetryOnFailure(
             maxRetryCount: 5,
             maxRetryDelay: TimeSpan.FromSeconds(30),
             errorCodesToAdd: null);
 
-        // Command timeout for long-running migrations
         npgsqlOptions.CommandTimeout(120);
     });
 });
 
-// Register IApplicationDbContext interface for Clean Architecture
 builder.Services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
 
 // Repositories
@@ -71,6 +70,7 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 
 // Services
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
@@ -78,21 +78,28 @@ builder.Services.AddScoped<IPdfExportService, PdfExportService>();
 builder.Services.AddSingleton<INotificationService, NotificationService>();
 builder.Services.AddScoped<IDatabaseInitializationService, DatabaseInitializationService>();
 
-// AutoMapper
-builder.Services.AddAutoMapper(typeof(MappingProfile));
-
 // MediatR
-builder.Services.AddMediatR(cfg => {
-    cfg.RegisterServicesFromAssembly(typeof(MappingProfile).Assembly);
+builder.Services.AddMediatR(cfg =>
+{
+    cfg.RegisterServicesFromAssembly(typeof(ValidationBehavior<,>).Assembly);
 });
 
 // FluentValidation
-builder.Services.AddValidatorsFromAssembly(typeof(MappingProfile).Assembly);
+builder.Services.AddValidatorsFromAssembly(typeof(ValidationBehavior<,>).Assembly);
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured");
+var secretKey = jwtSettings["SecretKey"];
+if (string.IsNullOrWhiteSpace(secretKey))
+{
+    throw new InvalidOperationException(
+        "JwtSettings:SecretKey is not configured. Set it via configuration or the JwtSettings__SecretKey environment variable.");
+}
+if (secretKey.Length < 32)
+{
+    throw new InvalidOperationException("JwtSettings:SecretKey must be at least 32 characters.");
+}
 
 builder.Services.AddAuthentication(options =>
 {
@@ -101,6 +108,10 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
+    // Keep the original JWT claim names (sub, email) instead of remapping
+    // them to the legacy SOAP-style claim types.
+    options.MapInboundClaims = false;
+
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
@@ -112,24 +123,38 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
         ClockSkew = TimeSpan.Zero
     };
+
+    // Allow SignalR websocket connections to authenticate via query string,
+    // since browsers cannot set headers on websocket requests.
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+
+            if (!string.IsNullOrEmpty(accessToken) &&
+                path.StartsWithSegments("/api/v1/notifications"))
+            {
+                context.Token = accessToken;
+            }
+
+            return Task.CompletedTask;
+        }
+    };
 });
 
 builder.Services.AddAuthorization();
 
-// CORS (with SignalR support)
+// CORS: origins come from configuration so deployments can restrict them
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? new[] { "http://localhost:3000", "http://localhost:5001", "https://localhost:5001" };
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("Default", policy =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-
-    // Additional policy for SignalR (needs credentials)
-    options.AddPolicy("SignalRPolicy", policy =>
-    {
-        policy.WithOrigins("http://localhost:5001", "https://localhost:5001")
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
@@ -152,15 +177,9 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "Inventory Management API",
         Version = "v1",
-        Description = "A production-grade REST API for inventory and work order management",
-        Contact = new OpenApiContact
-        {
-            Name = "API Support",
-            Email = "support@inventory.com"
-        }
+        Description = "REST API for inventory and work order management"
     });
 
-    // Add JWT Authentication to Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token",
@@ -185,7 +204,6 @@ builder.Services.AddSwaggerGen(c =>
         }
     });
 
-    // Include XML comments
     var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
     if (File.Exists(xmlPath))
@@ -194,7 +212,7 @@ builder.Services.AddSwaggerGen(c =>
     }
 });
 
-// Health checks with detailed database status
+// Health checks
 builder.Services.AddHealthChecks()
     .AddCheck<InventoryAPI.Api.HealthChecks.DatabaseHealthCheck>(
         "database",
@@ -202,94 +220,69 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
-if (app.Environment.IsDevelopment())
+// Swagger is enabled in all environments: this API's deployments are demos
+// and the interactive documentation is part of the product.
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Inventory API v1");
-        c.RoutePrefix = "swagger";
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Inventory API v1");
+    c.RoutePrefix = "swagger";
+});
 
-// Initialize database with environment-aware strategy
+// Database startup strategy:
+//  - Development: apply migrations and seed automatically.
+//  - Production: verify the schema is current and fail fast if it is not.
 using (var scope = app.Services.CreateScope())
 {
-    var services = scope.ServiceProvider;
-    var databaseService = services.GetRequiredService<IDatabaseInitializationService>();
-    var environment = services.GetRequiredService<IWebHostEnvironment>();
+    var databaseService = scope.ServiceProvider.GetRequiredService<IDatabaseInitializationService>();
 
     try
     {
-        if (environment.IsDevelopment())
+        if (app.Environment.IsDevelopment())
         {
-            Log.Information("=== DEVELOPMENT MODE: Initializing database ===");
             var result = await databaseService.InitializeAsync();
 
             if (result.Success)
             {
-                Log.Information("✓ Database initialization successful");
-                Log.Information("  - Connection: {Status}", result.CanConnect ? "Connected" : "Failed");
-                Log.Information("  - Current Migration: {Migration}", result.CurrentMigration);
-                Log.Information("  - Total Migrations Applied: {Count}", result.TotalMigrationsApplied);
-                if (result.MigrationsApplied)
-                {
-                    Log.Information("  - New Migrations Applied: {Count}", result.PendingMigrationsCount);
-                }
-                if (result.DataSeeded)
-                {
-                    Log.Information("  - Seed Data: Processed");
-                }
-                Log.Information("  - Initialization Time: {Time}ms", result.InitializationTimeMs);
+                Log.Information(
+                    "Database ready. Migration: {Migration}, applied: {Applied}, seeded: {Seeded}, took {Time}ms",
+                    result.CurrentMigration, result.TotalMigrationsApplied, result.DataSeeded, result.InitializationTimeMs);
             }
             else
             {
-                Log.Warning("⚠ Database initialization completed with warnings");
-                Log.Warning("  - Error: {Error}", result.ErrorMessage ?? "Unknown");
-                Log.Warning("  - Application will start but database functionality may be limited");
+                Log.Warning("Database initialization failed: {Error}. The API will start but may not function.",
+                    result.ErrorMessage ?? "Unknown");
             }
         }
         else
         {
-            Log.Information("=== PRODUCTION MODE: Verifying database ===");
             var result = await databaseService.VerifyAsync();
 
             if (!result.Success)
             {
-                Log.Fatal("✗ PRODUCTION STARTUP BLOCKED: Database verification failed");
-                Log.Fatal("  - Error: {Error}", result.ErrorMessage ?? "Unknown");
-                Log.Fatal("  - Action Required: Apply pending migrations before starting the application");
-
                 if (result.PendingMigrations.Any())
                 {
-                    Log.Fatal("  - Pending Migrations: {Migrations}",
+                    Log.Fatal("Pending migrations: {Migrations}. Apply them before starting: " +
+                              "dotnet ef database update --project src/InventoryAPI.Infrastructure --startup-project src/InventoryAPI.Api",
                         string.Join(", ", result.PendingMigrations));
-                    Log.Fatal("  - Run: dotnet ef database update --project src/InventoryAPI.Infrastructure --startup-project src/InventoryAPI.Api");
                 }
 
                 throw new InvalidOperationException(
-                    "Database is not ready for production. " +
+                    $"Database is not ready: {result.ErrorMessage ?? "unknown error"}. " +
                     "Apply all pending migrations before starting the application.");
             }
 
-            Log.Information("✓ Database verification successful");
-            Log.Information("  - Current Migration: {Migration}", result.CurrentMigration);
-            Log.Information("  - Total Migrations: {Count}", result.TotalMigrationsApplied);
-            Log.Information("  - Pending Migrations: {Count}", result.PendingMigrationsCount);
-            Log.Information("  - Verification Time: {Time}ms", result.InitializationTimeMs);
+            Log.Information("Database verified. Migration: {Migration}", result.CurrentMigration);
         }
     }
-    catch (Exception ex) when (environment.IsProduction())
+    catch (Exception ex) when (!app.Environment.IsDevelopment())
     {
-        // In production, fail fast if database is not ready
-        Log.Fatal(ex, "FATAL: Production startup failed due to database issues");
+        Log.Fatal(ex, "Startup aborted: database is not ready");
         throw;
     }
     catch (Exception ex)
     {
-        // In development, log but continue (for better DX)
-        Log.Error(ex, "Database initialization encountered an error, but application will continue");
+        Log.Error(ex, "Database initialization failed; continuing so the failure can be diagnosed via /api/v1/health");
     }
 }
 
@@ -297,9 +290,12 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseSerilogRequestLogging();
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
-app.UseCors("AllowAll");
+app.UseCors("Default");
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -313,3 +309,5 @@ app.MapHealthChecks("/api/v1/health");
 Log.Information("Starting Inventory Management API");
 
 app.Run();
+
+public partial class Program;

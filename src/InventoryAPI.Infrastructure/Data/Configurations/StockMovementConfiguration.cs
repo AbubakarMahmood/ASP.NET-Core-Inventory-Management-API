@@ -15,7 +15,6 @@ public class StockMovementConfiguration : IEntityTypeConfiguration<StockMovement
 
         builder.HasKey(sm => sm.Id);
 
-        // Configure properties
         builder.Property(sm => sm.SourceLocation)
             .IsRequired()
             .HasMaxLength(100);
@@ -34,17 +33,14 @@ public class StockMovementConfiguration : IEntityTypeConfiguration<StockMovement
         builder.Property(sm => sm.UnitCostAtTransaction)
             .HasPrecision(18, 2);
 
-        builder.Property(sm => sm.RowVersion)
-            .IsRowVersion();
-
-        // Configure relationships
+        // Relationships (each configured once, with its inverse navigation)
         builder.HasOne(sm => sm.Product)
-            .WithMany()
+            .WithMany(p => p.StockMovements)
             .HasForeignKey(sm => sm.ProductId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(sm => sm.PerformedBy)
-            .WithMany()
+            .WithMany(u => u.StockMovements)
             .HasForeignKey(sm => sm.PerformedById)
             .OnDelete(DeleteBehavior.Restrict);
 
@@ -54,7 +50,7 @@ public class StockMovementConfiguration : IEntityTypeConfiguration<StockMovement
             .OnDelete(DeleteBehavior.SetNull)
             .IsRequired(false);
 
-        // Indexes for performance
+        // Indexes for common access paths
         builder.HasIndex(sm => sm.ProductId);
         builder.HasIndex(sm => sm.PerformedById);
         builder.HasIndex(sm => sm.WorkOrderId);

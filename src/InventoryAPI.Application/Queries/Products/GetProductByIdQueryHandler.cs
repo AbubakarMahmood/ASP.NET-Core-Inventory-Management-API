@@ -1,9 +1,10 @@
-using AutoMapper;
 using InventoryAPI.Application.DTOs;
 using InventoryAPI.Domain.Exceptions;
 using InventoryAPI.Application.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+
+using InventoryAPI.Application.Mappings;
 
 namespace InventoryAPI.Application.Queries.Products;
 
@@ -13,12 +14,10 @@ namespace InventoryAPI.Application.Queries.Products;
 public class GetProductByIdQueryHandler : IRequestHandler<GetProductByIdQuery, ProductDto>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public GetProductByIdQueryHandler(IApplicationDbContext context, IMapper mapper)
+    public GetProductByIdQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<ProductDto> Handle(GetProductByIdQuery request, CancellationToken cancellationToken)
@@ -32,6 +31,6 @@ public class GetProductByIdQueryHandler : IRequestHandler<GetProductByIdQuery, P
             throw new NotFoundException($"Product with ID {request.Id} not found");
         }
 
-        return _mapper.Map<ProductDto>(product);
+        return product.ToDto();
     }
 }

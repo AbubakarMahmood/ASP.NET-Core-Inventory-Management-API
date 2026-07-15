@@ -21,5 +21,10 @@ public class UpdateProductCommand : IRequest<ProductDto>
     public decimal UnitCost { get; set; }
     public string Location { get; set; } = string.Empty;
     public CostingMethod CostingMethod { get; set; } = CostingMethod.Average;
-    public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+
+    /// <summary>
+    /// Concurrency token from the ProductDto that was edited. When provided,
+    /// the update is rejected if the product changed since it was read.
+    /// </summary>
+    public uint? Version { get; set; }
 }

@@ -35,9 +35,6 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.CreatedBy)
             .IsRequired();
 
-        builder.Property(u => u.RowVersion)
-            .IsRowVersion();
-
         // Indexes
         builder.HasIndex(u => u.Email)
             .IsUnique();

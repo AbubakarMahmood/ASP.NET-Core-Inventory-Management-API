@@ -1,8 +1,8 @@
-using InventoryAPI.Application.Common;
 using Asp.Versioning;
 using InventoryAPI.Application.Commands.Auth;
 using InventoryAPI.Application.DTOs;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace InventoryAPI.Api.Controllers;
@@ -37,8 +37,6 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
     {
-        _logger.LogInformation("Login attempt for user: {Email}", request.Email);
-
         var command = new LoginCommand
         {
             Email = request.Email,
@@ -47,27 +45,51 @@ public class AuthController : ControllerBase
 
         var result = await _mediator.Send(command);
 
-        _logger.LogInformation("Login successful for user: {Email}", request.Email);
+        _logger.LogInformation("Login successful for {Email}", request.Email);
 
         return Ok(result);
     }
 
     /// <summary>
-    /// Refresh access token
+    /// Exchange a refresh token for a new token pair
     /// </summary>
-    /// <param name="refreshToken">Refresh token</param>
+    /// <param name="request">The refresh token issued at login</param>
     /// <returns>New JWT tokens</returns>
     /// <response code="200">Token refreshed</response>
-    /// <response code="401">Invalid refresh token</response>
+    /// <response code="401">Invalid or expired refresh token</response>
     [HttpPost("refresh")]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public Task<ActionResult<AuthResponse>> Refresh([FromBody] string refreshToken)
+    public async Task<ActionResult<AuthResponse>> Refresh([FromBody] RefreshTokenRequest request)
     {
-        _logger.LogInformation("Token refresh attempt");
+        var command = new RefreshTokenCommand { RefreshToken = request.RefreshToken };
 
-        // TODO: Implement refresh token logic
-        return Task.FromResult<ActionResult<AuthResponse>>(
-            StatusCode(StatusCodes.Status501NotImplemented, "Refresh token endpoint not yet implemented"));
+        var result = await _mediator.Send(command);
+
+        return Ok(result);
     }
+
+    /// <summary>
+    /// Revoke the current user's refresh token
+    /// </summary>
+    /// <response code="204">Refresh token revoked</response>
+    /// <response code="401">Not authenticated</response>
+    [HttpPost("logout")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Logout()
+    {
+        await _mediator.Send(new RevokeTokenCommand());
+
+        return NoContent();
+    }
+}
+
+/// <summary>
+/// Refresh token request body
+/// </summary>
+public class RefreshTokenRequest
+{
+    public string RefreshToken { get; set; } = string.Empty;
 }

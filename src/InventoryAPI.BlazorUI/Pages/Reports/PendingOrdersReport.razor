@@ -2,29 +2,11 @@
 @attribute [Authorize(Roles = "Admin,Manager")]
 @inject WorkOrderService WorkOrderService
 @inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
 
 <PageTitle>Pending Orders Report - Inventory Management</PageTitle>
 
 <MudText Typo="Typo.h4" Class="mb-4">Pending Work Orders Report</MudText>
-
-<MudAlert Severity="Severity.Info" Class="mb-4">
-    <MudText Typo="Typo.h6">Work Order Tracking Coming Soon!</MudText>
-    <MudText>This report will show all work orders that require action:</MudText>
-    <MudList Dense="true">
-        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
-            Submitted orders awaiting approval
-        </MudListItem>
-        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
-            Approved orders ready to start
-        </MudListItem>
-        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
-            In-progress orders nearing due date
-        </MudListItem>
-        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
-            Overdue work orders
-        </MudListItem>
-    </MudList>
-</MudAlert>
 
 <MudPaper Elevation="2" Class="pa-4 mb-4">
     <MudGrid>
@@ -33,7 +15,7 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                     <div>
                         <MudText Typo="Typo.body2" Color="Color.Info">Submitted</MudText>
-                        <MudText Typo="Typo.h4">0</MudText>
+                        <MudText Typo="Typo.h4">@_submittedCount</MudText>
                     </div>
                     <MudIcon Icon="@Icons.Material.Filled.AssignmentTurnedIn" Size="Size.Large" Color="Color.Info" />
                 </MudStack>
@@ -44,7 +26,7 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                     <div>
                         <MudText Typo="Typo.body2" Color="Color.Success">Approved</MudText>
-                        <MudText Typo="Typo.h4">0</MudText>
+                        <MudText Typo="Typo.h4">@_approvedCount</MudText>
                     </div>
                     <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Large" Color="Color.Success" />
                 </MudStack>
@@ -55,7 +37,7 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                     <div>
                         <MudText Typo="Typo.body2" Color="Color.Warning">In Progress</MudText>
-                        <MudText Typo="Typo.h4">0</MudText>
+                        <MudText Typo="Typo.h4">@_inProgressCount</MudText>
                     </div>
                     <MudIcon Icon="@Icons.Material.Filled.Pending" Size="Size.Large" Color="Color.Warning" />
                 </MudStack>
@@ -66,7 +48,7 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                     <div>
                         <MudText Typo="Typo.body2" Color="Color.Error">Overdue</MudText>
-                        <MudText Typo="Typo.h4">0</MudText>
+                        <MudText Typo="Typo.h4">@_overdueCount</MudText>
                     </div>
                     <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Error" />
                 </MudStack>
@@ -78,7 +60,7 @@
 <MudPaper Elevation="2" Class="pa-4">
     <MudText Typo="Typo.h6" Class="mb-3">Pending Work Orders</MudText>
 
-    <MudTable Items="@_workOrders" Hover="true" Striped="true" Dense="true">
+    <MudTable Items="@_workOrders" Hover="true" Striped="true" Dense="true" Loading="@_isLoading">
         <HeaderContent>
             <MudTh>Order #</MudTh>
             <MudTh>Title</MudTh>
@@ -92,15 +74,17 @@
             <MudTd DataLabel="Order #">@context.OrderNumber</MudTd>
             <MudTd DataLabel="Title">@context.Title</MudTd>
             <MudTd DataLabel="Status">
-                <MudChip Size="Size.Small" Color="Color.Info">@context.Status</MudChip>
+                <MudChip Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
             </MudTd>
             <MudTd DataLabel="Priority">
-                <MudChip Size="Size.Small" Color="Color.Warning">@context.Priority</MudChip>
+                <MudChip Size="Size.Small" Color="@GetPriorityColor(context.Priority)">@context.Priority</MudChip>
             </MudTd>
             <MudTd DataLabel="Due Date">
                 @if (context.DueDate.HasValue)
                 {
-                    @context.DueDate.Value.ToShortDateString()
+                    <MudText Color="@(IsOverdue(context) ? Color.Error : Color.Default)">
+                        @context.DueDate.Value.ToShortDateString()
+                    </MudText>
                 }
                 else
                 {
@@ -108,10 +92,13 @@
                 }
             </MudTd>
             <MudTd DataLabel="Days Pending">
-                <MudText>-</MudText>
+                @((DateTime.UtcNow - context.CreatedAt).Days)
             </MudTd>
             <MudTd DataLabel="Actions">
-                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Primary" />
+                <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                               Size="Size.Small"
+                               Color="Color.Primary"
+                               OnClick="@(() => NavigationManager.NavigateTo($"/work-orders/{context.Id}"))" />
             </MudTd>
         </RowTemplate>
         <NoRecordsContent>
@@ -131,10 +118,70 @@
 
 @code {
     private List<WorkOrderDto> _workOrders = new();
+    private bool _isLoading = true;
+    private int _submittedCount;
+    private int _approvedCount;
+    private int _inProgressCount;
+    private int _overdueCount;
 
     protected override async Task OnInitializedAsync()
     {
-        // Placeholder - will be implemented when work order API is complete
-        await Task.CompletedTask;
+        await LoadPendingOrdersAsync();
     }
+
+    private async Task LoadPendingOrdersAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            var pendingStatuses = new[]
+            {
+                WorkOrderStatus.Submitted,
+                WorkOrderStatus.Approved,
+                WorkOrderStatus.InProgress
+            };
+
+            var results = await Task.WhenAll(pendingStatuses.Select(status =>
+                WorkOrderService.GetWorkOrdersAsync(pageNumber: 1, pageSize: 200, status: status)));
+
+            _workOrders = results
+                .Where(r => r != null)
+                .SelectMany(r => r!.Items)
+                .OrderBy(w => w.DueDate ?? DateTime.MaxValue)
+                .ToList();
+
+            _submittedCount = _workOrders.Count(w => w.Status == WorkOrderStatus.Submitted);
+            _approvedCount = _workOrders.Count(w => w.Status == WorkOrderStatus.Approved);
+            _inProgressCount = _workOrders.Count(w => w.Status == WorkOrderStatus.InProgress);
+            _overdueCount = _workOrders.Count(IsOverdue);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading pending orders: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private static bool IsOverdue(WorkOrderDto workOrder) =>
+        workOrder.DueDate.HasValue && workOrder.DueDate.Value < DateTime.UtcNow;
+
+    private static Color GetStatusColor(WorkOrderStatus status) => status switch
+    {
+        WorkOrderStatus.Submitted => Color.Info,
+        WorkOrderStatus.Approved => Color.Success,
+        WorkOrderStatus.InProgress => Color.Warning,
+        _ => Color.Default
+    };
+
+    private static Color GetPriorityColor(WorkOrderPriority priority) => priority switch
+    {
+        WorkOrderPriority.Critical => Color.Error,
+        WorkOrderPriority.High => Color.Warning,
+        WorkOrderPriority.Medium => Color.Info,
+        _ => Color.Default
+    };
 }

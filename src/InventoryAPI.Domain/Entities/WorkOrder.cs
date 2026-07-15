@@ -16,6 +16,7 @@ public class WorkOrder : BaseAuditableEntity
     public string Description { get; set; } = string.Empty;
     public DateTime? DueDate { get; set; }
     public DateTime? CompletedDate { get; set; }
+    public string? RejectionReason { get; set; }
 
     // Foreign keys
     public Guid RequestedById { get; set; }
@@ -52,7 +53,11 @@ public class WorkOrder : BaseAuditableEntity
         if (Status != WorkOrderStatus.Submitted)
             throw new BusinessRuleViolationException("Only submitted work orders can be rejected.");
 
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new BusinessRuleViolationException("A reason is required to reject a work order.");
+
         Status = WorkOrderStatus.Rejected;
+        RejectionReason = reason;
     }
 
     public void Start()

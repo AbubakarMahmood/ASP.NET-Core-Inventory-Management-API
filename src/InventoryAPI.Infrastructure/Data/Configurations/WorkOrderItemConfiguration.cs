@@ -15,25 +15,21 @@ public class WorkOrderItemConfiguration : IEntityTypeConfiguration<WorkOrderItem
 
         builder.HasKey(woi => woi.Id);
 
-        // Configure properties
         builder.Property(woi => woi.Notes)
             .HasMaxLength(1000);
 
-        builder.Property(woi => woi.RowVersion)
-            .IsRowVersion();
-
-        // Configure relationships
+        // Relationships
         builder.HasOne(woi => woi.WorkOrder)
             .WithMany(wo => wo.Items)
             .HasForeignKey(woi => woi.WorkOrderId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne(woi => woi.Product)
-            .WithMany()
+            .WithMany(p => p.WorkOrderItems)
             .HasForeignKey(woi => woi.ProductId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Indexes for performance
+        // Indexes
         builder.HasIndex(woi => woi.WorkOrderId);
         builder.HasIndex(woi => woi.ProductId);
     }

@@ -1,9 +1,10 @@
 using InventoryAPI.Application.Interfaces;
-using AutoMapper;
 using InventoryAPI.Application.Common;
 using InventoryAPI.Application.DTOs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+
+using InventoryAPI.Application.Mappings;
 
 namespace InventoryAPI.Application.Queries.Products;
 
@@ -13,12 +14,10 @@ namespace InventoryAPI.Application.Queries.Products;
 public class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, PaginatedResult<ProductDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public GetProductsQueryHandler(IApplicationDbContext context, IMapper mapper)
+    public GetProductsQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<PaginatedResult<ProductDto>> Handle(GetProductsQuery request, CancellationToken cancellationToken)
@@ -33,10 +32,11 @@ public class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, Paginat
 
         if (!string.IsNullOrWhiteSpace(request.SearchTerm))
         {
+            var search = request.SearchTerm.ToLower();
             query = query.Where(p =>
-                p.Name.Contains(request.SearchTerm) ||
-                p.SKU.Contains(request.SearchTerm) ||
-                p.Description.Contains(request.SearchTerm));
+                p.Name.ToLower().Contains(search) ||
+                p.SKU.ToLower().Contains(search) ||
+                p.Description.ToLower().Contains(search));
         }
 
         if (request.LowStockOnly == true)
@@ -85,7 +85,7 @@ public class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, Paginat
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
 
-        var productDtos = _mapper.Map<List<ProductDto>>(products);
+        var productDtos = products.Select(x => x.ToDto()).ToList();
 
         return new PaginatedResult<ProductDto>(
             productDtos,

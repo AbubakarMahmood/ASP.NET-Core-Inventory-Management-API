@@ -1,11 +1,11 @@
-using AutoMapper;
 using InventoryAPI.Application.DTOs;
-using InventoryAPI.Domain.Entities;
 using InventoryAPI.Application.Interfaces;
+using InventoryAPI.Domain.Entities;
+using InventoryAPI.Domain.Enums;
+using InventoryAPI.Domain.Exceptions;
 using MediatR;
-using Microsoft.AspNetCore.Http;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
+
+using InventoryAPI.Application.Mappings;
 
 namespace InventoryAPI.Application.Commands.WorkOrders;
 
@@ -14,55 +14,46 @@ namespace InventoryAPI.Application.Commands.WorkOrders;
 /// </summary>
 public class CreateWorkOrderCommandHandler : IRequestHandler<CreateWorkOrderCommand, WorkOrderDto>
 {
+    private const int OrderNumberRetries = 3;
+
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IMapper _mapper;
-    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ICurrentUserService _currentUser;
 
     public CreateWorkOrderCommandHandler(
         IUnitOfWork unitOfWork,
-        IMapper mapper,
-        IHttpContextAccessor httpContextAccessor)
+        ICurrentUserService currentUser)
     {
         _unitOfWork = unitOfWork;
-        _mapper = mapper;
-        _httpContextAccessor = httpContextAccessor;
+        _currentUser = currentUser;
     }
 
     public async Task<WorkOrderDto> Handle(CreateWorkOrderCommand request, CancellationToken cancellationToken)
     {
-        // Get current user ID from JWT claims
-        var userIdClaim = _httpContextAccessor.HttpContext?.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
-        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var currentUserId))
-        {
-            throw new UnauthorizedAccessException("User not authenticated");
-        }
+        var currentUserId = _currentUser.RequireUserId();
 
-        // Validate products exist
+        // Validate products exist before creating anything
         foreach (var item in request.Items)
         {
-            var product = await _unitOfWork.Products.GetByIdAsync(item.ProductId, cancellationToken);
-            if (product == null)
+            var productExists = await _unitOfWork.Products
+                .AnyAsync(p => p.Id == item.ProductId, cancellationToken);
+
+            if (!productExists)
             {
-                throw new KeyNotFoundException($"Product with ID {item.ProductId} not found");
+                throw new NotFoundException(nameof(Product), item.ProductId);
             }
         }
 
-        // Generate order number
-        var orderNumber = await GenerateOrderNumberAsync(cancellationToken);
-
-        // Create work order entity
         var workOrder = new WorkOrder
         {
-            OrderNumber = orderNumber,
+            OrderNumber = await GenerateOrderNumberAsync(cancellationToken),
             Title = request.Title,
             Description = request.Description,
             Priority = request.Priority,
             DueDate = request.DueDate,
             RequestedById = currentUserId,
-            Status = Domain.Enums.WorkOrderStatus.Draft
+            Status = WorkOrderStatus.Draft
         };
 
-        // Add items
         foreach (var itemRequest in request.Items)
         {
             workOrder.Items.Add(new WorkOrderItem
@@ -74,60 +65,41 @@ public class CreateWorkOrderCommandHandler : IRequestHandler<CreateWorkOrderComm
             });
         }
 
-        // Save to database
         await _unitOfWork.WorkOrders.AddAsync(workOrder, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Load related data for DTO
+        // Reload with navigation properties for a fully-populated DTO
         var savedWorkOrder = await _unitOfWork.WorkOrders.GetByIdWithDetailsAsync(workOrder.Id, cancellationToken);
 
-        return await MapToDto(savedWorkOrder!, cancellationToken);
+        return savedWorkOrder!.ToDto();
     }
 
+    /// <summary>
+    /// Generates a daily-sequential order number (WO-yyyyMMdd-0001). The unique
+    /// index on OrderNumber is the real guarantee; this probes for a free slot
+    /// so collisions under concurrency surface as a clear error, not silently.
+    /// </summary>
     private async Task<string> GenerateOrderNumberAsync(CancellationToken cancellationToken)
     {
-        // Get count of work orders to generate sequential number
-        var count = await _unitOfWork.WorkOrders.CountAsync(w => true, cancellationToken);
-        var orderNumber = $"WO-{DateTime.UtcNow:yyyyMMdd}-{(count + 1):D4}";
-        return orderNumber;
-    }
+        var today = DateTime.UtcNow.Date;
+        var prefix = $"WO-{today:yyyyMMdd}-";
 
-    private async Task<WorkOrderDto> MapToDto(WorkOrder workOrder, CancellationToken cancellationToken)
-    {
-        var dto = _mapper.Map<WorkOrderDto>(workOrder);
+        var todayCount = await _unitOfWork.WorkOrders
+            .CountAsync(w => w.OrderNumber.StartsWith(prefix), cancellationToken);
 
-        // Map user names
-        var requestedBy = await _unitOfWork.Users.GetByIdAsync(workOrder.RequestedById, cancellationToken);
-        dto.RequestedByName = requestedBy?.FullName ?? "Unknown";
-        dto.RequestedByEmail = requestedBy?.Email ?? "";
-
-        if (workOrder.AssignedToId.HasValue)
+        for (var attempt = 0; attempt < OrderNumberRetries; attempt++)
         {
-            var assignedTo = await _unitOfWork.Users.GetByIdAsync(workOrder.AssignedToId.Value, cancellationToken);
-            dto.AssignedToName = assignedTo?.FullName;
-            dto.AssignedToEmail = assignedTo?.Email;
-        }
+            var candidate = $"{prefix}{todayCount + 1 + attempt:D4}";
+            var taken = await _unitOfWork.WorkOrders
+                .AnyAsync(w => w.OrderNumber == candidate, cancellationToken);
 
-        // Map items with product details
-        dto.Items = new List<WorkOrderItemDto>();
-        foreach (var item in workOrder.Items)
-        {
-            var product = await _unitOfWork.Products.GetByIdAsync(item.ProductId, cancellationToken);
-            dto.Items.Add(new WorkOrderItemDto
+            if (!taken)
             {
-                Id = item.Id,
-                WorkOrderId = item.WorkOrderId,
-                ProductId = item.ProductId,
-                ProductSKU = product?.SKU ?? "",
-                ProductName = product?.Name ?? "",
-                UnitOfMeasure = product?.UnitOfMeasure ?? "",
-                CurrentStock = product?.CurrentStock ?? 0,
-                QuantityRequested = item.QuantityRequested,
-                QuantityIssued = item.QuantityIssued,
-                Notes = item.Notes
-            });
+                return candidate;
+            }
         }
 
-        return dto;
+        throw new BusinessRuleViolationException(
+            "Could not allocate a unique work order number. Please retry.");
     }
 }

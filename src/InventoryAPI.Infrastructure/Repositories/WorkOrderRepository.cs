@@ -18,6 +18,7 @@ public class WorkOrderRepository : Repository<WorkOrder>, IWorkOrderRepository
     {
         return await _dbSet
             .Include(w => w.Items)
+                .ThenInclude(i => i.Product)
             .Include(w => w.RequestedBy)
             .Include(w => w.AssignedTo)
             .FirstOrDefaultAsync(w => w.Id == id, cancellationToken);

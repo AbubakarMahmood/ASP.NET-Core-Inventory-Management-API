@@ -1,3 +1,4 @@
+using Blazored.LocalStorage;
 using Microsoft.AspNetCore.SignalR.Client;
 using MudBlazor;
 
@@ -12,14 +13,24 @@ public class SignalRNotificationService : IAsyncDisposable
     private readonly ISnackbar _snackbar;
     private readonly ILogger<SignalRNotificationService> _logger;
 
-    public SignalRNotificationService(IConfiguration configuration, ISnackbar snackbar, ILogger<SignalRNotificationService> logger)
+    public SignalRNotificationService(
+        IConfiguration configuration,
+        ILocalStorageService localStorage,
+        ISnackbar snackbar,
+        ILogger<SignalRNotificationService> logger)
     {
         _snackbar = snackbar;
         _logger = logger;
 
         var apiBaseUrl = configuration["ApiBaseUrl"] ?? "http://localhost:5000";
         _hubConnection = new HubConnectionBuilder()
-            .WithUrl($"{apiBaseUrl}/api/v1/notifications")
+            .WithUrl($"{apiBaseUrl}/api/v1/notifications", options =>
+            {
+                // The hub requires authentication; browsers cannot set headers
+                // on websocket requests, so the token travels as access_token.
+                options.AccessTokenProvider = async () =>
+                    await localStorage.GetItemAsync<string>("authToken");
+            })
             .WithAutomaticReconnect()
             .Build();
 
@@ -28,12 +39,9 @@ public class SignalRNotificationService : IAsyncDisposable
 
     private void ConfigureHandlers()
     {
-        _hubConnection.On<dynamic>("ReceiveNotification", (notification) =>
+        _hubConnection.On<GeneralNotification>("ReceiveNotification", notification =>
         {
-            var message = notification.message?.ToString() ?? "New notification";
-            var type = notification.type?.ToString() ?? "info";
-
-            var severity = type switch
+            var severity = notification.Type switch
             {
                 "success" => Severity.Success,
                 "error" => Severity.Error,
@@ -41,26 +49,24 @@ public class SignalRNotificationService : IAsyncDisposable
                 _ => Severity.Info
             };
 
-            _snackbar.Add(message, severity);
+            _snackbar.Add(notification.Message ?? "New notification", severity);
         });
 
-        _hubConnection.On<dynamic>("ReceiveWorkOrderNotification", (notification) =>
+        _hubConnection.On<WorkOrderNotification>("ReceiveWorkOrderNotification", notification =>
         {
-            var orderNumber = notification.orderNumber?.ToString() ?? "";
-            var message = notification.message?.ToString() ?? $"Work order {orderNumber} updated";
-            _snackbar.Add(message, Severity.Info);
+            _snackbar.Add(
+                notification.Message ?? $"Work order {notification.OrderNumber} updated",
+                Severity.Info);
         });
 
-        _hubConnection.On<dynamic>("ReceiveLowStockNotification", (notification) =>
+        _hubConnection.On<LowStockNotification>("ReceiveLowStockNotification", notification =>
         {
-            var message = notification.message?.ToString() ?? "Low stock alert";
-            _snackbar.Add(message, Severity.Warning);
+            _snackbar.Add(notification.Message ?? "Low stock alert", Severity.Warning);
         });
 
-        _hubConnection.On<dynamic>("ReceiveStockMovementNotification", (notification) =>
+        _hubConnection.On<StockMovementNotification>("ReceiveStockMovementNotification", notification =>
         {
-            var message = notification.message?.ToString() ?? "Stock movement recorded";
-            _snackbar.Add(message, Severity.Info);
+            _snackbar.Add(notification.Message ?? "Stock movement recorded", Severity.Info);
         });
     }
 
@@ -100,4 +106,9 @@ public class SignalRNotificationService : IAsyncDisposable
     {
         await _hubConnection.DisposeAsync();
     }
+
+    private sealed record GeneralNotification(string? Message, string? Type, DateTime Timestamp);
+    private sealed record WorkOrderNotification(string? OrderNumber, string? Action, string? Message, DateTime Timestamp);
+    private sealed record LowStockNotification(string? ProductSku, string? ProductName, int CurrentStock, string? Message, DateTime Timestamp);
+    private sealed record StockMovementNotification(string? ProductSku, string? MovementType, int Quantity, string? Message, DateTime Timestamp);
 }

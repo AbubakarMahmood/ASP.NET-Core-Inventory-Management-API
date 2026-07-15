@@ -21,10 +21,15 @@ public class TokenService : ITokenService
         _configuration = configuration;
     }
 
+    public int AccessTokenLifetimeMinutes =>
+        int.TryParse(_configuration["JwtSettings:ExpiryMinutes"], out var minutes) ? minutes : 60;
+
     public string GenerateAccessToken(User user)
     {
-        var securityKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(_configuration["JwtSettings:SecretKey"]!));
+        var secretKey = _configuration["JwtSettings:SecretKey"]
+            ?? throw new InvalidOperationException("JWT SecretKey not configured");
+
+        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
         var claims = new[]
@@ -41,8 +46,7 @@ public class TokenService : ITokenService
             issuer: _configuration["JwtSettings:Issuer"],
             audience: _configuration["JwtSettings:Audience"],
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(
-                Convert.ToDouble(_configuration["JwtSettings:ExpiryMinutes"])),
+            expires: DateTime.UtcNow.AddMinutes(AccessTokenLifetimeMinutes),
             signingCredentials: credentials
         );
 
@@ -59,7 +63,7 @@ public class TokenService : ITokenService
 
     public DateTime GetRefreshTokenExpiryTime()
     {
-        var expiryDays = Convert.ToInt32(_configuration["JwtSettings:RefreshTokenExpiryDays"] ?? "7");
+        var expiryDays = int.TryParse(_configuration["JwtSettings:RefreshTokenExpiryDays"], out var days) ? days : 7;
         return DateTime.UtcNow.AddDays(expiryDays);
     }
 }

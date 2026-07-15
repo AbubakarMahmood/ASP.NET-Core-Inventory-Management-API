@@ -15,7 +15,6 @@ public class WorkOrderConfiguration : IEntityTypeConfiguration<WorkOrder>
 
         builder.HasKey(wo => wo.Id);
 
-        // Configure properties
         builder.Property(wo => wo.OrderNumber)
             .IsRequired()
             .HasMaxLength(50);
@@ -27,28 +26,23 @@ public class WorkOrderConfiguration : IEntityTypeConfiguration<WorkOrder>
         builder.Property(wo => wo.Description)
             .HasMaxLength(2000);
 
+        builder.Property(wo => wo.RejectionReason)
+            .HasMaxLength(1000);
+
         builder.Property(wo => wo.CreatedBy)
             .IsRequired();
 
-        builder.Property(wo => wo.RowVersion)
-            .IsRowVersion();
-
-        // Configure relationships
+        // Relationships
         builder.HasOne(wo => wo.RequestedBy)
-            .WithMany()
+            .WithMany(u => u.RequestedWorkOrders)
             .HasForeignKey(wo => wo.RequestedById)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(wo => wo.AssignedTo)
-            .WithMany()
+            .WithMany(u => u.AssignedWorkOrders)
             .HasForeignKey(wo => wo.AssignedToId)
             .OnDelete(DeleteBehavior.Restrict)
             .IsRequired(false);
-
-        builder.HasMany(wo => wo.Items)
-            .WithOne(woi => woi.WorkOrder)
-            .HasForeignKey(woi => woi.WorkOrderId)
-            .OnDelete(DeleteBehavior.Cascade);
 
         // Indexes
         builder.HasIndex(wo => wo.OrderNumber)

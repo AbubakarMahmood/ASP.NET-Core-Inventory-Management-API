@@ -30,9 +30,18 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         // Apply all entity configurations from this assembly
         modelBuilder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
 
-        // Global query filter for soft deletes
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
+            // Optimistic concurrency for every entity via PostgreSQL's xmin
+            // system column (updated by the database on every write).
+            if (typeof(BaseEntity).IsAssignableFrom(entityType.ClrType))
+            {
+                modelBuilder.Entity(entityType.ClrType)
+                    .Property(nameof(BaseEntity.Version))
+                    .IsRowVersion();
+            }
+
+            // Global query filter for soft deletes
             if (typeof(BaseAuditableEntity).IsAssignableFrom(entityType.ClrType))
             {
                 modelBuilder.Entity(entityType.ClrType)
@@ -44,7 +53,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     private static System.Linq.Expressions.LambdaExpression GenerateSoftDeleteFilter(Type entityType)
     {
         var parameter = System.Linq.Expressions.Expression.Parameter(entityType, "e");
-        var property = System.Linq.Expressions.Expression.Property(parameter, "IsDeleted");
+        var property = System.Linq.Expressions.Expression.Property(parameter, nameof(BaseAuditableEntity.IsDeleted));
         var falseConstant = System.Linq.Expressions.Expression.Constant(false);
         var equals = System.Linq.Expressions.Expression.Equal(property, falseConstant);
         return System.Linq.Expressions.Expression.Lambda(equals, parameter);
@@ -64,6 +73,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
                     entry.Entity.ModifiedAt = DateTime.UtcNow;
                     break;
                 case EntityState.Deleted:
+                    // Convert hard deletes into soft deletes
                     entry.State = EntityState.Modified;
                     entry.Entity.IsDeleted = true;
                     entry.Entity.DeletedAt = DateTime.UtcNow;

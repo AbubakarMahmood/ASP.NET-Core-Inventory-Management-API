@@ -23,6 +23,7 @@ public class WorkOrderDto
     public List<WorkOrderItemDto> Items { get; set; } = new();
 
     // Audit
+    public string? RejectionReason { get; set; }
     public DateTime CreatedAt { get; set; }
     public string CreatedBy { get; set; } = string.Empty;
     public DateTime? ModifiedAt { get; set; }

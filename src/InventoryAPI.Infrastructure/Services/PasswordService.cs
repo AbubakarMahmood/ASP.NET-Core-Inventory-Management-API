@@ -57,19 +57,19 @@ public class PasswordService : IPasswordService
                 iterationCount: Iterations,
                 numBytesRequested: HashSize);
 
-            // Compare the results
-            for (int i = 0; i < HashSize; i++)
-            {
-                if (hashBytes[i + SaltSize] != hash[i])
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            // Constant-time comparison to avoid leaking timing information
+            return CryptographicOperations.FixedTimeEquals(
+                hashBytes.AsSpan(SaltSize, HashSize),
+                hash);
         }
-        catch
+        catch (FormatException)
         {
+            // Stored value is not valid Base64
+            return false;
+        }
+        catch (ArgumentException)
+        {
+            // Stored value is shorter than salt + hash
             return false;
         }
     }

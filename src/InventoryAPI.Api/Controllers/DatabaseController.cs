@@ -6,11 +6,13 @@ using Microsoft.AspNetCore.Mvc;
 namespace InventoryAPI.Api.Controllers;
 
 /// <summary>
-/// Database management and status endpoints
+/// Database management and status endpoints. Admin-only: migration details
+/// are internal information. Public liveness lives at /api/v1/health.
 /// </summary>
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/[controller]")]
+[Authorize(Roles = "Admin")]
 public class DatabaseController : ControllerBase
 {
     private readonly IDatabaseInitializationService _databaseService;
@@ -29,7 +31,6 @@ public class DatabaseController : ControllerBase
     /// </summary>
     /// <returns>Database status information</returns>
     [HttpGet("status")]
-    [AllowAnonymous] // Public endpoint for monitoring systems
     [ProducesResponseType(typeof(DatabaseStatusResponse), 200)]
     public async Task<ActionResult<DatabaseStatusResponse>> GetStatus()
     {

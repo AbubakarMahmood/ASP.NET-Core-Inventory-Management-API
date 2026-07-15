@@ -11,7 +11,6 @@ public class StockMovementService
         _apiClient = apiClient;
     }
 
-    // Placeholder methods - to be implemented
     public async Task<PaginatedResult<StockMovementDto>?> GetStockMovementsAsync(
         int pageNumber = 1,
         int pageSize = 10,
@@ -42,12 +41,12 @@ public class StockMovementService
             query += $"&toDate={toDate.Value:yyyy-MM-dd}";
         }
 
-        return await _apiClient.GetAsync<PaginatedResult<StockMovementDto>>($"/api/v1/stock-movements?{query}");
+        return await _apiClient.GetAsync<PaginatedResult<StockMovementDto>>($"/api/v1/stockmovements?{query}");
     }
 
     public async Task<StockMovementDto?> RecordStockMovementAsync(RecordStockMovementRequest request)
     {
-        return await _apiClient.PostAsync<RecordStockMovementRequest, StockMovementDto>("/api/v1/stock-movements", request);
+        return await _apiClient.PostAsync<RecordStockMovementRequest, StockMovementDto>("/api/v1/stockmovements", request);
     }
 
     public async Task<StockMovementStatistics?> GetStatisticsAsync(DateTime? fromDate = null, DateTime? toDate = null)
@@ -65,7 +64,7 @@ public class StockMovementService
             query += $"toDate={toDate.Value:yyyy-MM-dd}";
         }
 
-        var endpoint = "/api/v1/stock-movements/statistics";
+        var endpoint = "/api/v1/stockmovements/statistics";
         if (!string.IsNullOrEmpty(query))
         {
             endpoint += $"?{query}";

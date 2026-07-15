@@ -1,8 +1,9 @@
 using InventoryAPI.Application.Interfaces;
-using AutoMapper;
 using InventoryAPI.Application.DTOs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+
+using InventoryAPI.Application.Mappings;
 
 namespace InventoryAPI.Application.Queries.Users;
 
@@ -12,12 +13,10 @@ namespace InventoryAPI.Application.Queries.Users;
 public class GetUserByIdQueryHandler : IRequestHandler<GetUserByIdQuery, UserDto?>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public GetUserByIdQueryHandler(IApplicationDbContext context, IMapper mapper)
+    public GetUserByIdQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<UserDto?> Handle(GetUserByIdQuery request, CancellationToken cancellationToken)
@@ -30,6 +29,6 @@ public class GetUserByIdQueryHandler : IRequestHandler<GetUserByIdQuery, UserDto
             return null;
         }
 
-        return _mapper.Map<UserDto>(user);
+        return user.ToDto();
     }
 }

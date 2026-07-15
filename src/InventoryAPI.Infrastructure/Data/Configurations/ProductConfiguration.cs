@@ -5,7 +5,8 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace InventoryAPI.Infrastructure.Data.Configurations;
 
 /// <summary>
-/// Entity configuration for Product
+/// Entity configuration for Product. Relationships to WorkOrderItem and
+/// StockMovement are configured on the dependent side.
 /// </summary>
 public class ProductConfiguration : IEntityTypeConfiguration<Product>
 {
@@ -15,7 +16,6 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
 
         builder.HasKey(p => p.Id);
 
-        // Configure properties
         builder.Property(p => p.SKU)
             .IsRequired()
             .HasMaxLength(50);
@@ -44,20 +44,6 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
 
         builder.Property(p => p.CreatedBy)
             .IsRequired();
-
-        builder.Property(p => p.RowVersion)
-            .IsRowVersion();
-
-        // Configure relationships
-        builder.HasMany(p => p.WorkOrderItems)
-            .WithOne(woi => woi.Product)
-            .HasForeignKey(woi => woi.ProductId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasMany(p => p.StockMovements)
-            .WithOne(sm => sm.Product)
-            .HasForeignKey(sm => sm.ProductId)
-            .OnDelete(DeleteBehavior.Restrict);
 
         // Indexes
         builder.HasIndex(p => p.SKU)

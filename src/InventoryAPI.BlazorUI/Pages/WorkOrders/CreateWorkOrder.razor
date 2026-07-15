@@ -1,6 +1,7 @@
 @page "/work-orders/create"
 @attribute [Authorize]
 @inject WorkOrderService WorkOrderService
+@inject ProductService ProductService
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
 
@@ -194,17 +195,8 @@
 
         try
         {
-            // Note: This requires ProductService which might not exist yet
-            // For now, this is a placeholder - you'd need to implement ProductService.GetProductsAsync
-            // var result = await ProductService.GetProductsAsync(1, 1000);
-            // if (result != null)
-            // {
-            //     _products = result.Items.OrderBy(p => p.SKU).ToList();
-            // }
-
-            // Placeholder: Empty list for now
-            _products = new List<ProductDto>();
-            Snackbar.Add("Note: Product loading not yet implemented", Severity.Info);
+            var result = await ProductService.GetProductsAsync(1, 1000);
+            _products = result?.Items.OrderBy(p => p.SKU).ToList() ?? new List<ProductDto>();
         }
         catch (Exception ex)
         {

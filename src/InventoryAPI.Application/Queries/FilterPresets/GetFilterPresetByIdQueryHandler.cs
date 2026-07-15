@@ -1,12 +1,10 @@
-using AutoMapper;
 using InventoryAPI.Application.DTOs;
+using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Domain.Entities;
 using InventoryAPI.Domain.Exceptions;
-using InventoryAPI.Application.Interfaces;
 using MediatR;
-using Microsoft.AspNetCore.Http;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
+
+using InventoryAPI.Application.Mappings;
 
 namespace InventoryAPI.Application.Queries.FilterPresets;
 
@@ -16,40 +14,29 @@ namespace InventoryAPI.Application.Queries.FilterPresets;
 public class GetFilterPresetByIdQueryHandler : IRequestHandler<GetFilterPresetByIdQuery, FilterPresetDto>
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IMapper _mapper;
-    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ICurrentUserService _currentUser;
 
     public GetFilterPresetByIdQueryHandler(
         IUnitOfWork unitOfWork,
-        IMapper mapper,
-        IHttpContextAccessor httpContextAccessor)
+        ICurrentUserService currentUser)
     {
         _unitOfWork = unitOfWork;
-        _mapper = mapper;
-        _httpContextAccessor = httpContextAccessor;
+        _currentUser = currentUser;
     }
 
     public async Task<FilterPresetDto> Handle(GetFilterPresetByIdQuery request, CancellationToken cancellationToken)
     {
-        // Get current user ID from JWT claims
-        var userIdString = _httpContextAccessor.HttpContext?.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
-        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
-        {
-            throw new UnauthorizedAccessException("User not authenticated");
-        }
+        var userId = _currentUser.RequireUserId();
 
-        var filterPreset = await _unitOfWork.FilterPresets.GetByIdAsync(request.Id, cancellationToken);
-        if (filterPreset == null)
-        {
-            throw new NotFoundException(nameof(FilterPreset), request.Id);
-        }
+        var filterPreset = await _unitOfWork.FilterPresets.GetByIdAsync(request.Id, cancellationToken)
+            ?? throw new NotFoundException(nameof(FilterPreset), request.Id);
 
-        // Verify access (owner or shared)
+        // Accessible when owned by the caller or explicitly shared
         if (filterPreset.UserId != userId && !filterPreset.IsShared)
         {
             throw new UnauthorizedAccessException("You don't have access to this filter preset");
         }
 
-        return _mapper.Map<FilterPresetDto>(filterPreset);
+        return filterPreset.ToDto();
     }
 }

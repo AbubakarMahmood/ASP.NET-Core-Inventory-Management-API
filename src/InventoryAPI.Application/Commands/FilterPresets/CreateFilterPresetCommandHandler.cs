@@ -1,11 +1,9 @@
-using AutoMapper;
 using InventoryAPI.Application.DTOs;
-using InventoryAPI.Domain.Entities;
 using InventoryAPI.Application.Interfaces;
+using InventoryAPI.Domain.Entities;
 using MediatR;
-using Microsoft.AspNetCore.Http;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
+
+using InventoryAPI.Application.Mappings;
 
 namespace InventoryAPI.Application.Commands.FilterPresets;
 
@@ -15,31 +13,21 @@ namespace InventoryAPI.Application.Commands.FilterPresets;
 public class CreateFilterPresetCommandHandler : IRequestHandler<CreateFilterPresetCommand, FilterPresetDto>
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IMapper _mapper;
-    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ICurrentUserService _currentUser;
 
     public CreateFilterPresetCommandHandler(
         IUnitOfWork unitOfWork,
-        IMapper mapper,
-        IHttpContextAccessor httpContextAccessor)
+        ICurrentUserService currentUser)
     {
         _unitOfWork = unitOfWork;
-        _mapper = mapper;
-        _httpContextAccessor = httpContextAccessor;
+        _currentUser = currentUser;
     }
 
     public async Task<FilterPresetDto> Handle(CreateFilterPresetCommand request, CancellationToken cancellationToken)
     {
-        // Get current user ID from JWT claims
-        var userIdString = _httpContextAccessor.HttpContext?.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
-        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
-        {
-            throw new UnauthorizedAccessException("User not authenticated");
-        }
+        var userId = _currentUser.RequireUserId();
 
-        var currentUserEmail = _httpContextAccessor.HttpContext?.User.FindFirst(JwtRegisteredClaimNames.Email)?.Value ?? "Unknown";
-
-        // If this is set as default, unset other defaults for this entity type
+        // A user has at most one default preset per entity type
         if (request.IsDefault)
         {
             var existingDefaults = await _unitOfWork.FilterPresets
@@ -52,7 +40,6 @@ public class CreateFilterPresetCommandHandler : IRequestHandler<CreateFilterPres
             }
         }
 
-        // Create filter preset
         var filterPreset = new FilterPreset
         {
             UserId = userId,
@@ -61,12 +48,12 @@ public class CreateFilterPresetCommandHandler : IRequestHandler<CreateFilterPres
             FilterData = request.FilterData,
             IsDefault = request.IsDefault,
             IsShared = request.IsShared,
-            CreatedBy = currentUserEmail
+            CreatedBy = _currentUser.Email ?? "Unknown"
         };
 
         await _unitOfWork.FilterPresets.AddAsync(filterPreset, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return _mapper.Map<FilterPresetDto>(filterPreset);
+        return filterPreset.ToDto();
     }
 }

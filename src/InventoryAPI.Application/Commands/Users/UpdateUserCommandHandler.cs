@@ -1,7 +1,10 @@
-using AutoMapper;
 using InventoryAPI.Application.DTOs;
 using InventoryAPI.Application.Interfaces;
+using InventoryAPI.Domain.Entities;
+using InventoryAPI.Domain.Exceptions;
 using MediatR;
+
+using InventoryAPI.Application.Mappings;
 
 namespace InventoryAPI.Application.Commands.Users;
 
@@ -11,35 +14,32 @@ namespace InventoryAPI.Application.Commands.Users;
 public class UpdateUserCommandHandler : IRequestHandler<UpdateUserCommand, UserDto>
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IMapper _mapper;
 
-    public UpdateUserCommandHandler(IUnitOfWork unitOfWork, IMapper mapper)
+    public UpdateUserCommandHandler(IUnitOfWork unitOfWork)
     {
         _unitOfWork = unitOfWork;
-        _mapper = mapper;
     }
 
     public async Task<UserDto> Handle(UpdateUserCommand request, CancellationToken cancellationToken)
     {
         var user = await _unitOfWork.Users.GetByIdAsync(request.UserId, cancellationToken)
-            ?? throw new KeyNotFoundException($"User {request.UserId} not found");
+            ?? throw new NotFoundException(nameof(User), request.UserId);
 
-        // Check if email is changing and if new email already exists
-        if (user.Email.ToLower() != request.Email.ToLower())
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+
+        if (user.Email != normalizedEmail)
         {
-            var existingUser = await _unitOfWork.Users.FirstOrDefaultAsync(
-                u => u.Email.ToLower() == request.Email.ToLower(),
-                cancellationToken);
+            var emailTaken = await _unitOfWork.Users.AnyAsync(
+                u => u.Email == normalizedEmail && u.Id != request.UserId, cancellationToken);
 
-            if (existingUser != null)
+            if (emailTaken)
             {
-                throw new InvalidOperationException($"User with email {request.Email} already exists");
+                throw new ValidationException("Email", $"A user with email {request.Email} already exists");
             }
 
-            user.Email = request.Email.ToLower();
+            user.Email = normalizedEmail;
         }
 
-        // Update user properties
         user.FirstName = request.FirstName;
         user.LastName = request.LastName;
         user.Role = request.Role;
@@ -48,7 +48,7 @@ public class UpdateUserCommandHandler : IRequestHandler<UpdateUserCommand, UserD
         _unitOfWork.Users.Update(user);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return _mapper.Map<UserDto>(user);
+        return user.ToDto();
     }
 }
 
@@ -69,12 +69,12 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
     public async Task<bool> Handle(ChangePasswordCommand request, CancellationToken cancellationToken)
     {
         var user = await _unitOfWork.Users.GetByIdAsync(request.UserId, cancellationToken)
-            ?? throw new KeyNotFoundException($"User {request.UserId} not found");
+            ?? throw new NotFoundException(nameof(User), request.UserId);
 
-        // Hash new password
         user.PasswordHash = _passwordService.HashPassword(request.NewPassword);
 
-        // Clear refresh token to force re-login
+        // Invalidate any outstanding refresh token so the password change takes
+        // effect immediately.
         user.RefreshToken = null;
         user.RefreshTokenExpiryTime = null;
 
@@ -100,9 +100,9 @@ public class DeleteUserCommandHandler : IRequestHandler<DeleteUserCommand, bool>
     public async Task<bool> Handle(DeleteUserCommand request, CancellationToken cancellationToken)
     {
         var user = await _unitOfWork.Users.GetByIdAsync(request.UserId, cancellationToken)
-            ?? throw new KeyNotFoundException($"User {request.UserId} not found");
+            ?? throw new NotFoundException(nameof(User), request.UserId);
 
-        _unitOfWork.Users.Remove(user); // This will soft delete due to BaseAuditableEntity
+        _unitOfWork.Users.Remove(user); // Soft delete via BaseAuditableEntity
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return true;

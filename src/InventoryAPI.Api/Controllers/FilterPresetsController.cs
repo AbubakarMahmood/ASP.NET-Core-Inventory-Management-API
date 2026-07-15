@@ -118,10 +118,8 @@ public class FilterPresetsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<FilterPresetDto>> UpdateFilterPreset(Guid id, [FromBody] UpdateFilterPresetCommand command)
     {
-        if (id != command.Id)
-        {
-            return BadRequest("ID in URL does not match ID in request body");
-        }
+        // The route identifies the resource; the body doesn't need to repeat it
+        command.Id = id;
 
         _logger.LogInformation("Updating filter preset with ID: {Id}", id);
 

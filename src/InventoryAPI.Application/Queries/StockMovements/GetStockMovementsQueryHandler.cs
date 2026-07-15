@@ -1,5 +1,4 @@
 using InventoryAPI.Application.Interfaces;
-using AutoMapper;
 using InventoryAPI.Application.Common;
 using InventoryAPI.Application.DTOs;
 using MediatR;
@@ -10,12 +9,10 @@ namespace InventoryAPI.Application.Queries.StockMovements;
 public class GetStockMovementsQueryHandler : IRequestHandler<GetStockMovementsQuery, PaginatedResult<StockMovementDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public GetStockMovementsQueryHandler(IApplicationDbContext context, IMapper mapper)
+    public GetStockMovementsQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<PaginatedResult<StockMovementDto>> Handle(GetStockMovementsQuery request, CancellationToken cancellationToken)

@@ -1,9 +1,10 @@
 using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Application.Common;
-using AutoMapper;
 using InventoryAPI.Application.DTOs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+
+using InventoryAPI.Application.Mappings;
 
 namespace InventoryAPI.Application.Queries.WorkOrders;
 
@@ -13,12 +14,10 @@ namespace InventoryAPI.Application.Queries.WorkOrders;
 public class GetWorkOrdersQueryHandler : IRequestHandler<GetWorkOrdersQuery, PaginatedResult<WorkOrderDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public GetWorkOrdersQueryHandler(IApplicationDbContext context, IMapper mapper)
+    public GetWorkOrdersQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<PaginatedResult<WorkOrderDto>> Handle(GetWorkOrdersQuery request, CancellationToken cancellationToken)
@@ -77,7 +76,7 @@ public class GetWorkOrdersQueryHandler : IRequestHandler<GetWorkOrdersQuery, Pag
         var workOrderDtos = new List<WorkOrderDto>();
         foreach (var workOrder in workOrders)
         {
-            var dto = _mapper.Map<WorkOrderDto>(workOrder);
+            var dto = workOrder.ToDto();
             dto.RequestedByName = workOrder.RequestedBy?.FullName ?? "Unknown";
             dto.RequestedByEmail = workOrder.RequestedBy?.Email ?? "";
             dto.AssignedToName = workOrder.AssignedTo?.FullName;

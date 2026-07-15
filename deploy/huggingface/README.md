@@ -25,4 +25,4 @@ Log in via `POST /api/v1/auth/login` with one of the demo accounts:
 Storage is ephemeral: data resets to the seeded demo set when the Space
 restarts.
 
-Source: https://github.com/AbubakarMahmood/ASP.NET-Core-Inventory-Management-API-
+Source: https://github.com/AbubakarMahmood/ASP.NET-Core-Inventory-Management-API

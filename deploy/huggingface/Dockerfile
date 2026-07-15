@@ -4,7 +4,7 @@
 # this Dockerfile, start.sh, and README.md.
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-RUN git clone --depth 1 https://github.com/AbubakarMahmood/ASP.NET-Core-Inventory-Management-API- /src
+RUN git clone --depth 1 https://github.com/AbubakarMahmood/ASP.NET-Core-Inventory-Management-API /src
 WORKDIR /src
 RUN dotnet publish src/InventoryAPI.Api/InventoryAPI.Api.csproj -c Release -o /app/publish /p:UseAppHost=false
 

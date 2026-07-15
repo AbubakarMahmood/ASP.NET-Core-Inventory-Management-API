@@ -302,6 +302,9 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// The interactive documentation is this API's landing page
+app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
+
 app.MapHub<InventoryAPI.Api.Hubs.NotificationHub>("/api/v1/notifications");
 
 app.MapHealthChecks("/api/v1/health");

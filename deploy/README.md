@@ -1,24 +1,26 @@
 # Deployment
 
-## Hugging Face Space (free demo hosting)
+## Single-container demo (`huggingface/`)
 
-The `huggingface/` folder is a complete Docker Space definition that builds
-the API from the public GitHub repository and runs it together with
-PostgreSQL in a single free-tier container.
+The `huggingface/` folder packages the API and PostgreSQL into one
+self-contained container image — useful for demo hosts that give you a
+single container and nothing else. It was written as a Hugging Face Docker
+Space definition (Docker Spaces now require a paid HF plan) but works on
+any host that builds a Dockerfile: point the platform at these three files,
+expose port 7860, and the API serves Swagger as its landing page.
 
-To deploy:
+Data lives inside the container, so it resets to the seeded demo set on
+every restart — intended for demos, not real use.
 
-1. Make sure the GitHub repository is public (the Space clones it at build time).
-2. Create a new Space at https://huggingface.co/new-space — pick **Docker** as the SDK.
-3. Upload the three files from `deploy/huggingface/` (`README.md`, `Dockerfile`, `start.sh`)
-   to the Space, keeping the names. The web editor's "Add file" button is enough.
+## Full stack
 
-The Space builds for a few minutes, then serves Swagger as its landing page.
-Data is ephemeral and reseeds on every restart, which suits a demo.
+`Dockerfile` + `docker-compose.yml` at the repository root run the real
+topology (API, PostgreSQL, Blazor UI) on any Docker host:
 
-## Anywhere else
+```bash
+docker compose up --build
+```
 
-`Dockerfile` + `docker-compose.yml` at the repository root run the full
-stack (API, PostgreSQL, Blazor UI) on any Docker host. Supply real values
-for `JwtSettings__SecretKey` and the connection string via environment
-variables for non-demo use.
+For anything beyond a local demo, supply real values for
+`JwtSettings__SecretKey` and the connection string via environment
+variables, and restrict `Cors__AllowedOrigins` to your UI's origin.

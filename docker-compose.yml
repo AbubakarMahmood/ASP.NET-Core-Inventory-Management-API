@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:14-alpine
+    image: postgres:16-alpine
     container_name: inventory-postgres
     environment:
       POSTGRES_DB: inventorydb
@@ -12,6 +12,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - inventory-network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U inventoryuser -d inventorydb"]
       interval: 10s
@@ -24,16 +25,18 @@ services:
       dockerfile: Dockerfile
     container_name: inventory-api
     environment:
+      # Development mode: migrations and demo seed data are applied on startup
       - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://+:80
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=inventorydb;Username=inventoryuser;Password=InventoryPass123!
-      - JwtSettings__SecretKey=YourSuperSecretKeyThatIsAtLeast32CharactersLongForSecurity
+      - JwtSettings__SecretKey=compose-demo-signing-key-change-for-real-deployments
       - JwtSettings__Issuer=InventoryAPI
       - JwtSettings__Audience=InventoryAPIUsers
       - JwtSettings__ExpiryMinutes=60
       - JwtSettings__RefreshTokenExpiryDays=7
+      - DataProtection__KeysPath=/app/data-protection-keys
+      - Cors__AllowedOrigins__0=http://localhost:3000
     ports:
-      - "5000:80"
+      - "5000:8080"
     volumes:
       - dataprotection_keys:/app/data-protection-keys
     depends_on:

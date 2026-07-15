@@ -2,39 +2,27 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Copy solution and project files
-COPY ["InventoryAPI.sln", "./"]
-COPY ["src/InventoryAPI.Api/InventoryAPI.Api.csproj", "src/InventoryAPI.Api/"]
-COPY ["src/InventoryAPI.Application/InventoryAPI.Application.csproj", "src/InventoryAPI.Application/"]
-COPY ["src/InventoryAPI.Domain/InventoryAPI.Domain.csproj", "src/InventoryAPI.Domain/"]
-COPY ["src/InventoryAPI.Infrastructure/InventoryAPI.Infrastructure.csproj", "src/InventoryAPI.Infrastructure/"]
-COPY ["src/InventoryAPI.BlazorUI/InventoryAPI.BlazorUI.csproj", "src/InventoryAPI.BlazorUI/"]
-COPY ["tests/InventoryAPI.UnitTests/InventoryAPI.UnitTests.csproj", "tests/InventoryAPI.UnitTests/"]
-COPY ["tests/InventoryAPI.IntegrationTests/InventoryAPI.IntegrationTests.csproj", "tests/InventoryAPI.IntegrationTests/"]
+# Copy project files first so the restore layer is cached
+COPY src/InventoryAPI.Domain/InventoryAPI.Domain.csproj src/InventoryAPI.Domain/
+COPY src/InventoryAPI.Application/InventoryAPI.Application.csproj src/InventoryAPI.Application/
+COPY src/InventoryAPI.Infrastructure/InventoryAPI.Infrastructure.csproj src/InventoryAPI.Infrastructure/
+COPY src/InventoryAPI.Api/InventoryAPI.Api.csproj src/InventoryAPI.Api/
+RUN dotnet restore src/InventoryAPI.Api/InventoryAPI.Api.csproj
 
-# Restore dependencies
-RUN dotnet restore
-
-# Copy all source code
-COPY . .
-
-# Build the application
-WORKDIR "/src/src/InventoryAPI.Api"
-RUN dotnet build "InventoryAPI.Api.csproj" -c Release -o /app/build
-
-# Publish stage
-FROM build AS publish
-RUN dotnet publish "InventoryAPI.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
+COPY src/ src/
+RUN dotnet publish src/InventoryAPI.Api/InventoryAPI.Api.csproj -c Release -o /app/publish /p:UseAppHost=false
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
-EXPOSE 80
-EXPOSE 443
 
-COPY --from=publish /app/publish .
+COPY --from=build /app/publish .
 
-# Create logs directory
-RUN mkdir -p /app/logs
+# Run as the non-root user that ships with the .NET images
+RUN mkdir -p /app/logs /app/data-protection-keys && chown -R app:app /app
+USER app
+
+ENV ASPNETCORE_URLS=http://+:8080
+EXPOSE 8080
 
 ENTRYPOINT ["dotnet", "InventoryAPI.Api.dll"]

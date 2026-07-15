@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore InventoryAPI.sln
+
+      - name: Build
+        run: dotnet build InventoryAPI.sln -c Release --no-restore
+
+      - name: Unit tests
+        run: dotnet test tests/InventoryAPI.UnitTests -c Release --no-build --logger "console;verbosity=minimal"
+
+      - name: Integration tests
+        run: dotnet test tests/InventoryAPI.IntegrationTests -c Release --no-build --logger "console;verbosity=minimal"
+
+  docker-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API image
+        run: docker build -t inventory-api .
+
+      - name: Build UI image
+        run: docker build -f Dockerfile.blazor -t inventory-ui .

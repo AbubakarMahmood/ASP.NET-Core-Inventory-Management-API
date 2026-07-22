@@ -21,7 +21,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Development");
 
-        builder.UseSetting("JwtSettings:SecretKey", "test");
+        builder.UseSetting("JwtSettings:SecretKey", new string('x', 64));
         builder.UseSetting("JwtSettings:Issuer", "InventoryAPI");
         builder.UseSetting("JwtSettings:Audience", "InventoryAPIUsers");
         builder.UseSetting("JwtSettings:ExpiryMinutes", "60");

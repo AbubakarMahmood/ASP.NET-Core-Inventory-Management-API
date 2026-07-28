@@ -1,26 +1,15 @@
-# Deployment
+# Deployment policy
 
-## Single-container demo (`huggingface/`)
+The supported repository deployment is the root Docker Compose topology:
+separate API, PostgreSQL, and static-web containers. Copy `.env.example` to
+`.env`, replace both secrets, and run `docker compose up --build`.
 
-The `huggingface/` folder packages the API and PostgreSQL into one
-self-contained container image — useful for demo hosts that give you a
-single container and nothing else. It was written as a Hugging Face Docker
-Space definition (Docker Spaces now require a paid HF plan) but works on
-any host that builds a Dockerfile: point the platform at these three files,
-expose port 7860, and the API serves Swagger as its landing page.
+The former single-container Hugging Face definition was removed. It cloned a
+moving public branch during the image build, ran PostgreSQL beside the API,
+embedded a signing key, and used ephemeral storage. Those properties made it
+an unsuitable security or reproducibility example.
 
-Data lives inside the container, so it resets to the seeded demo set on
-every restart — intended for demos, not real use.
-
-## Full stack
-
-`Dockerfile` + `docker-compose.yml` at the repository root run the real
-topology (API, PostgreSQL, Blazor UI) on any Docker host:
-
-```bash
-docker compose up --build
-```
-
-For anything beyond a local demo, supply real values for
-`JwtSettings__SecretKey` and the connection string via environment
-variables, and restrict `Cors__AllowedOrigins` to your UI's origin.
+For a real environment, apply migrations as a release step rather than from
+application startup, disable demo seeding and OpenAPI, terminate TLS at a
+trusted proxy, back up PostgreSQL, and store the JWT/database secrets in the
+platform secret manager. See [`../docs/OPERATIONS.md`](../docs/OPERATIONS.md).

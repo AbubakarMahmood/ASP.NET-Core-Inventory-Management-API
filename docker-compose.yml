@@ -1,68 +1,93 @@
+name: stockverity
+
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: inventory-postgres
     environment:
-      POSTGRES_DB: inventorydb
-      POSTGRES_USER: inventoryuser
-      POSTGRES_PASSWORD: InventoryPass123!
+      POSTGRES_DB: ${POSTGRES_DB:-stockverity}
+      POSTGRES_USER: ${POSTGRES_USER:-stockverity}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - inventory-network
+      - backend
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U inventoryuser -d inventorydb"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 12
+      start_period: 10s
 
   api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: inventory-api
     environment:
-      # Development mode: migrations and demo seed data are applied on startup
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=inventorydb;Username=inventoryuser;Password=InventoryPass123!
-      - JwtSettings__SecretKey=compose-demo-signing-key-change-for-real-deployments
-      - JwtSettings__Issuer=InventoryAPI
-      - JwtSettings__Audience=InventoryAPIUsers
-      - JwtSettings__ExpiryMinutes=60
-      - JwtSettings__RefreshTokenExpiryDays=7
-      - DataProtection__KeysPath=/app/data-protection-keys
-      - Cors__AllowedOrigins__0=http://localhost:3000
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-stockverity};Username=${POSTGRES_USER:-stockverity};Password=${POSTGRES_PASSWORD}
+      JwtSettings__SecretKey: ${JWT_SECRET:?Set JWT_SECRET to at least 32 characters in .env}
+      JwtSettings__Issuer: StockVerity
+      JwtSettings__Audience: StockVerityUsers
+      JwtSettings__ExpiryMinutes: 60
+      JwtSettings__RefreshTokenExpiryDays: 7
+      DataProtection__KeysPath: /app/data-protection-keys
+      Database__ApplyMigrations: ${APPLY_MIGRATIONS:-false}
+      DemoData__Enabled: ${DEMO_DATA_ENABLED:-false}
+      OpenApi__Enabled: ${OPENAPI_ENABLED:-false}
+      HttpsRedirection__Enabled: "false"
+      Cors__AllowedOrigins__0: http://localhost:${UI_PORT:-3000}
     ports:
-      - "5000:8080"
+      - "${API_PORT:-5000}:8080"
     volumes:
       - dataprotection_keys:/app/data-protection-keys
+      - api_logs:/app/logs
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       postgres:
         condition: service_healthy
     networks:
-      - inventory-network
+      - frontend
+      - backend
     restart: unless-stopped
 
   ui:
     build:
       context: .
       dockerfile: Dockerfile.blazor
-    container_name: inventory-ui
     ports:
-      - "3000:80"
+      - "${UI_PORT:-3000}:8080"
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
-      - inventory-network
+      - frontend
     restart: unless-stopped
     depends_on:
       - api
 
 networks:
-  inventory-network:
+  frontend:
     driver: bridge
+  backend:
+    driver: bridge
+    internal: true
 
 volumes:
   postgres_data:
   dataprotection_keys:
+  api_logs:

@@ -26,6 +26,7 @@ public class GetStockMovementByIdQueryHandler : IRequestHandler<GetStockMovement
     public async Task<StockMovementDto> Handle(GetStockMovementByIdQuery request, CancellationToken cancellationToken)
     {
         var movement = await _context.StockMovements
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Include(m => m.Product)
             .Include(m => m.PerformedBy)

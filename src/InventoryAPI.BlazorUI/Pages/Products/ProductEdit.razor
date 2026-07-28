@@ -1,0 +1,108 @@
+@page "/products/edit/{Id:guid}"
+@attribute [Authorize(Roles = "Admin,Manager")]
+@inject ProductService ProductService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Edit Product - StockVerity</PageTitle>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else if (_model == null)
+{
+    <MudAlert Severity="Severity.Error">Product could not be loaded.</MudAlert>
+}
+else
+{
+    <MudText Typo="Typo.h4" Class="mb-2">Edit product metadata</MudText>
+    <MudAlert Severity="Severity.Info" Class="mb-4">On-hand stock is read-only here. Post a ledger movement to change quantity.</MudAlert>
+    <MudPaper Elevation="2" Class="pa-4">
+        <EditForm Model="@_model" OnValidSubmit="SaveAsync">
+            <MudGrid>
+                <MudItem xs="12" md="6"><MudTextField @bind-Value="_model.SKU" Label="SKU" Variant="Variant.Outlined" Required="true" /></MudItem>
+                <MudItem xs="12" md="6"><MudTextField @bind-Value="_model.Name" Label="Product name" Variant="Variant.Outlined" Required="true" /></MudItem>
+                <MudItem xs="12"><MudTextField @bind-Value="_model.Description" Label="Description" Variant="Variant.Outlined" Lines="3" /></MudItem>
+                <MudItem xs="12" md="6"><MudTextField @bind-Value="_model.Category" Label="Category" Variant="Variant.Outlined" Required="true" /></MudItem>
+                <MudItem xs="12" md="6"><MudTextField @bind-Value="_model.Location" Label="Stock location" Variant="Variant.Outlined" Required="true" /></MudItem>
+                <MudItem xs="12" md="4"><MudNumericField Value="@_currentStock" Label="Current stock" Variant="Variant.Outlined" ReadOnly="true" /></MudItem>
+                <MudItem xs="12" md="4"><MudNumericField @bind-Value="_model.ReorderPoint" Label="Reorder point" Variant="Variant.Outlined" Min="0" /></MudItem>
+                <MudItem xs="12" md="4"><MudNumericField @bind-Value="_model.ReorderQuantity" Label="Reorder quantity" Variant="Variant.Outlined" Min="1" /></MudItem>
+                <MudItem xs="12" md="6"><MudTextField @bind-Value="_model.UnitOfMeasure" Label="Unit of measure" Variant="Variant.Outlined" Required="true" /></MudItem>
+                <MudItem xs="12" md="6"><MudNumericField @bind-Value="_model.UnitCost" Label="Reference unit cost" Variant="Variant.Outlined" Min="0m" Format="N2" /></MudItem>
+            </MudGrid>
+            <MudDivider Class="my-4" />
+            <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                <MudButton Variant="Variant.Outlined" Href="/products" Disabled="@_isSaving">Cancel</MudButton>
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Disabled="@_isSaving">Save metadata</MudButton>
+            </MudStack>
+        </EditForm>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    private UpdateProductRequest? _model;
+    private int _currentStock;
+    private bool _isLoading = true;
+    private bool _isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var product = await ProductService.GetProductByIdAsync(Id);
+            if (product == null) return;
+
+            _currentStock = product.CurrentStock;
+            _model = new UpdateProductRequest
+            {
+                SKU = product.SKU,
+                Name = product.Name,
+                Description = product.Description,
+                Category = product.Category,
+                ReorderPoint = product.ReorderPoint,
+                ReorderQuantity = product.ReorderQuantity,
+                UnitOfMeasure = product.UnitOfMeasure,
+                UnitCost = product.UnitCost,
+                Location = product.Location,
+                Version = product.Version
+            };
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Product load failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_model == null) return;
+        _isSaving = true;
+        try
+        {
+            var updated = await ProductService.UpdateProductAsync(Id, _model);
+            if (updated == null)
+            {
+                Snackbar.Add("Product update failed.", Severity.Error);
+                return;
+            }
+
+            Snackbar.Add("Product metadata updated.", Severity.Success);
+            Navigation.NavigateTo("/products");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Product update failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

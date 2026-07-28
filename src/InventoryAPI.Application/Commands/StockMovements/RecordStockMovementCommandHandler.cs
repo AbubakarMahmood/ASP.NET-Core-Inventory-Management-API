@@ -1,103 +1,119 @@
+using InventoryAPI.Application.Common;
 using InventoryAPI.Application.DTOs;
 using InventoryAPI.Application.Interfaces;
+using InventoryAPI.Application.Mappings;
 using InventoryAPI.Domain.Entities;
 using InventoryAPI.Domain.Enums;
 using InventoryAPI.Domain.Exceptions;
 using MediatR;
-
-using InventoryAPI.Application.Mappings;
+using Microsoft.EntityFrameworkCore;
 
 namespace InventoryAPI.Application.Commands.StockMovements;
 
+/// <summary>
+/// Records one append-only ledger row and updates the corresponding product
+/// balance in the same unit-of-work commit.
+/// </summary>
 public class RecordStockMovementCommandHandler : IRequestHandler<RecordStockMovementCommand, StockMovementDto>
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUser;
 
-    public RecordStockMovementCommandHandler(
-        IUnitOfWork unitOfWork,
-        ICurrentUserService currentUser)
+    public RecordStockMovementCommandHandler(IUnitOfWork unitOfWork, ICurrentUserService currentUser)
     {
         _unitOfWork = unitOfWork;
         _currentUser = currentUser;
     }
 
-    public async Task<StockMovementDto> Handle(RecordStockMovementCommand request, CancellationToken cancellationToken)
+    public async Task<StockMovementDto> Handle(
+        RecordStockMovementCommand request,
+        CancellationToken cancellationToken)
     {
+        if (request.Type is StockMovementType.Transfer or StockMovementType.OpeningBalance)
+        {
+            throw new BusinessRuleViolationException(
+                request.Type == StockMovementType.Transfer
+                    ? "Transfer is not supported by the single-location inventory model. See RFC-0001."
+                    : "OpeningBalance can only be created atomically with a new product.");
+        }
+
+        var normalizedReason = TextNormalization.Required(request.Reason);
+        var normalizedReference = TextNormalization.OptionalOrNull(request.Reference);
+        var priorMovements = (await _unitOfWork.StockMovements.FindAsync(
+            movement => movement.OperationId == request.OperationId,
+            cancellationToken)).ToList();
+
+        if (priorMovements.Count > 0)
+        {
+            if (priorMovements.Count != 1 || !IsReplayOf(priorMovements[0], request, normalizedReason, normalizedReference))
+            {
+                throw new IdempotencyConflictException(request.OperationId);
+            }
+
+            return await EnrichAsync(priorMovements[0], cancellationToken);
+        }
+
         var product = await _unitOfWork.Products.GetByIdAsync(request.ProductId, cancellationToken)
             ?? throw new NotFoundException(nameof(Product), request.ProductId);
 
         var userId = _currentUser.RequireUserId();
+        var movement = StockMovement.Post(
+            product,
+            request.OperationId,
+            request.Type,
+            request.Quantity,
+            normalizedReason,
+            normalizedReference,
+            userId);
 
-        if (request.WorkOrderId.HasValue)
+        try
         {
-            var workOrderExists = await _unitOfWork.WorkOrders
-                .AnyAsync(w => w.Id == request.WorkOrderId.Value, cancellationToken);
-            if (!workOrderExists)
-                throw new NotFoundException(nameof(WorkOrder), request.WorkOrderId.Value);
+            await _unitOfWork.StockMovements.AddAsync(movement, cancellationToken);
+            _unitOfWork.Products.Update(product);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            throw new ConcurrencyConflictException(
+                "The product balance changed concurrently. Refresh the product and retry with a new operation id.",
+                exception);
         }
 
-        var movement = new StockMovement
-        {
-            ProductId = request.ProductId,
-            Type = request.Type,
-            Quantity = request.Quantity,
-            SourceLocation = request.SourceLocation,
-            DestinationLocation = request.DestinationLocation,
-            Reason = request.Reason,
-            Reference = request.Reference,
-            WorkOrderId = request.WorkOrderId,
-            PerformedById = userId,
-            Timestamp = DateTime.UtcNow,
-            UnitCostAtTransaction = product.UnitCost
-        };
+        return await EnrichAsync(movement, cancellationToken, product);
+    }
 
-        ApplyToStock(product, request);
-
-        // One SaveChanges commits the movement and the stock change atomically.
-        await _unitOfWork.StockMovements.AddAsync(movement, cancellationToken);
-        _unitOfWork.Products.Update(product);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
+    private async Task<StockMovementDto> EnrichAsync(
+        StockMovement movement,
+        CancellationToken cancellationToken,
+        Product? loadedProduct = null)
+    {
         var result = movement.ToDto();
-        result.ProductSKU = product.SKU;
-        result.ProductName = product.Name;
+        var product = loadedProduct
+            ?? await _unitOfWork.Products.GetByIdAsync(movement.ProductId, cancellationToken);
+        var user = await _unitOfWork.Users.GetByIdAsync(movement.PerformedById, cancellationToken);
 
-        var user = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
-        if (user != null)
+        if (product != null)
         {
-            result.PerformedByName = user.FullName;
+            result.ProductSKU = product.SKU;
+            result.ProductName = product.Name;
+            result.UnitOfMeasure = product.UnitOfMeasure;
         }
 
+        result.PerformedByName = user?.FullName ?? string.Empty;
         return result;
     }
 
-    private static void ApplyToStock(Product product, RecordStockMovementCommand request)
+    private static bool IsReplayOf(
+        StockMovement movement,
+        RecordStockMovementCommand request,
+        string normalizedReason,
+        string? normalizedReference)
     {
-        switch (request.Type)
-        {
-            case StockMovementType.Receipt:
-            case StockMovementType.Return:
-                product.AdjustStock(request.Quantity);
-                break;
-
-            case StockMovementType.Issue:
-                product.AdjustStock(-request.Quantity);
-                break;
-
-            case StockMovementType.Adjustment:
-                // Adjustments carry their own sign: positive increases stock,
-                // negative decreases it.
-                product.AdjustStock(request.Quantity);
-                break;
-
-            case StockMovementType.Transfer:
-                // Transfers relocate stock without changing the quantity on hand.
-                if (!string.IsNullOrEmpty(request.DestinationLocation))
-                {
-                    product.Location = request.DestinationLocation;
-                }
-                break;
-        }
+        return movement.WorkOrderId == null
+            && movement.ProductId == request.ProductId
+            && movement.Type == request.Type
+            && movement.Quantity == request.Quantity
+            && string.Equals(movement.Reason, normalizedReason, StringComparison.Ordinal)
+            && string.Equals(movement.Reference, normalizedReference, StringComparison.Ordinal);
     }
 }

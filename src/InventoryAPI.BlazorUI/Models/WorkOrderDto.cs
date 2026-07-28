@@ -10,6 +10,7 @@ public class WorkOrderDto
     public string Description { get; set; } = string.Empty;
     public DateTime? DueDate { get; set; }
     public DateTime? CompletedDate { get; set; }
+    public bool IsFullyIssued { get; set; }
 
     // User information
     public Guid RequestedById { get; set; }
@@ -41,6 +42,8 @@ public class WorkOrderItemDto
     public int CurrentStock { get; set; }
     public int QuantityRequested { get; set; }
     public int QuantityIssued { get; set; }
+    public int RemainingQuantity { get; set; }
+    public bool IsFullyIssued { get; set; }
     public string? Notes { get; set; }
 }
 

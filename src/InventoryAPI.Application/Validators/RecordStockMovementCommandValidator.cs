@@ -4,20 +4,20 @@ using InventoryAPI.Domain.Enums;
 
 namespace InventoryAPI.Application.Validators;
 
-/// <summary>
-/// Validator for RecordStockMovementCommand
-/// </summary>
 public class RecordStockMovementCommandValidator : AbstractValidator<RecordStockMovementCommand>
 {
     public RecordStockMovementCommandValidator()
     {
-        RuleFor(x => x.ProductId)
-            .NotEmpty().WithMessage("Product id is required");
+        RuleFor(x => x.OperationId)
+            .NotEmpty().WithMessage("Operation id is required for retry safety");
+
+        RuleFor(x => x.ProductId).NotEmpty().WithMessage("Product id is required");
 
         RuleFor(x => x.Type)
-            .IsInEnum().WithMessage("Invalid movement type");
+            .IsInEnum().WithMessage("Invalid movement type")
+            .Must(type => type is not StockMovementType.Transfer and not StockMovementType.OpeningBalance)
+            .WithMessage("Manual postings support Receipt, Issue, Adjustment, and Return only");
 
-        // Adjustments carry their own sign; every other movement type must be positive
         RuleFor(x => x.Quantity)
             .NotEqual(0).WithMessage("Quantity cannot be zero");
 
@@ -29,17 +29,6 @@ public class RecordStockMovementCommandValidator : AbstractValidator<RecordStock
         RuleFor(x => x.Reason)
             .NotEmpty().WithMessage("Reason is required")
             .MaximumLength(500).WithMessage("Reason cannot exceed 500 characters");
-
-        RuleFor(x => x.SourceLocation)
-            .MaximumLength(100).WithMessage("Source location cannot exceed 100 characters");
-
-        RuleFor(x => x.DestinationLocation)
-            .MaximumLength(100).WithMessage("Destination location cannot exceed 100 characters");
-
-        RuleFor(x => x.DestinationLocation)
-            .NotEmpty()
-            .When(x => x.Type == StockMovementType.Transfer)
-            .WithMessage("Destination location is required for transfers");
 
         RuleFor(x => x.Reference)
             .MaximumLength(100).WithMessage("Reference cannot exceed 100 characters");

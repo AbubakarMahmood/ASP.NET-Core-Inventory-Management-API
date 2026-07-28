@@ -1,11 +1,11 @@
 using InventoryAPI.Application.DTOs;
-using InventoryAPI.Domain.Enums;
 using MediatR;
 
 namespace InventoryAPI.Application.Commands.Products;
 
 /// <summary>
-/// Update product command
+/// Updates descriptive and replenishment metadata. On-hand stock is deliberately
+/// absent: every balance change must be posted through the stock ledger.
 /// </summary>
 public class UpdateProductCommand : IRequest<ProductDto>
 {
@@ -14,17 +14,15 @@ public class UpdateProductCommand : IRequest<ProductDto>
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string Category { get; set; } = string.Empty;
-    public int CurrentStock { get; set; }
     public int ReorderPoint { get; set; }
     public int ReorderQuantity { get; set; }
     public string UnitOfMeasure { get; set; } = string.Empty;
     public decimal UnitCost { get; set; }
     public string Location { get; set; } = string.Empty;
-    public CostingMethod CostingMethod { get; set; } = CostingMethod.Average;
 
     /// <summary>
-    /// Concurrency token from the ProductDto that was edited. When provided,
-    /// the update is rejected if the product changed since it was read.
+    /// PostgreSQL xmin value returned by the read endpoint. It is required so a
+    /// stale edit cannot silently overwrite a concurrent change.
     /// </summary>
     public uint? Version { get; set; }
 }

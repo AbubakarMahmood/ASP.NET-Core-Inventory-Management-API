@@ -181,7 +181,7 @@ public class ProductsController : ControllerBase
         var query = new GetProductsQuery
         {
             PageNumber = 1,
-            PageSize = int.MaxValue,
+            PageSize = 10_000,
             Category = category,
             SearchTerm = searchTerm,
             LowStockOnly = lowStockOnly
@@ -219,7 +219,7 @@ public class ProductsController : ControllerBase
         var query = new GetProductsQuery
         {
             PageNumber = 1,
-            PageSize = int.MaxValue,
+            PageSize = 10_000,
             Category = category,
             SearchTerm = searchTerm,
             LowStockOnly = lowStockOnly

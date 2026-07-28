@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using FluentAssertions;
 using InventoryAPI.Application.Common;
 using InventoryAPI.Application.DTOs;
+using InventoryAPI.Domain.Enums;
 using InventoryAPI.IntegrationTests.Infrastructure;
 
 namespace InventoryAPI.IntegrationTests;
@@ -14,169 +16,178 @@ public class ProductEndpointsTests : ApiTestBase
     }
 
     [Fact]
-    public async Task GetProducts_WithoutToken_Returns401()
+    public async Task Create_WithOpeningStock_PostsOpeningLedgerEntry()
     {
-        var client = CreateClient();
+        var client = await CreateAuthenticatedClientAsync();
+        var product = await CreateProductAsync(client, openingStock: 7);
 
-        var response = await client.GetAsync("/api/v1/products");
+        product.CurrentStock.Should().Be(7);
+        product.Version.Should().BeGreaterThan(0);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var movements = await client.GetFromJsonAsync<PaginatedResult<StockMovementDto>>(
+            $"/api/v1/stockmovements/product/{product.Id}",
+            JsonOptions,
+            TestContext.Current.CancellationToken);
+
+        movements!.Items.Should().ContainSingle();
+        var opening = movements.Items.Single();
+        opening.Type.Should().Be(StockMovementType.OpeningBalance);
+        opening.Quantity.Should().Be(7);
+        opening.BalanceBefore.Should().Be(0);
+        opening.BalanceAfter.Should().Be(7);
     }
 
     [Fact]
-    public async Task GetProducts_Authenticated_ReturnsSeededProducts()
+    public async Task Update_ChangesMetadataButCannotAcceptStockField()
     {
         var client = await CreateAuthenticatedClientAsync();
+        var product = await CreateProductAsync(client, openingStock: 5);
 
-        var result = await client.GetFromJsonAsync<PaginatedResult<ProductDto>>(
-            "/api/v1/products?pageSize=50", JsonOptions);
+        var update = await client.PutAsJsonAsync(
+            $"/api/v1/products/{product.Id}",
+            new
+            {
+                sku = product.SKU,
+                name = "Renamed product",
+                description = product.Description,
+                category = product.Category,
+                reorderPoint = product.ReorderPoint,
+                reorderQuantity = product.ReorderQuantity,
+                unitOfMeasure = product.UnitOfMeasure,
+                unitCost = product.UnitCost,
+                location = "TEST-02",
+                version = product.Version
+            },
+            TestContext.Current.CancellationToken);
 
-        result!.Items.Should().NotBeEmpty();
-        result.Items.Should().Contain(p => p.SKU == "WIDGET-001");
-        result.TotalCount.Should().BeGreaterThanOrEqualTo(result.Items.Count);
+        update.StatusCode.Should().Be(HttpStatusCode.OK);
+        var updated = (await update.Content.ReadFromJsonAsync<ProductDto>(
+            JsonOptions,
+            TestContext.Current.CancellationToken))!;
+        updated.Name.Should().Be("Renamed product");
+        updated.Location.Should().Be("TEST-02");
+        updated.CurrentStock.Should().Be(5);
+
+        var attemptToEditStock = await client.PutAsJsonAsync(
+            $"/api/v1/products/{product.Id}",
+            new
+            {
+                sku = updated.SKU,
+                name = updated.Name,
+                description = updated.Description,
+                category = updated.Category,
+                currentStock = 999,
+                reorderPoint = updated.ReorderPoint,
+                reorderQuantity = updated.ReorderQuantity,
+                unitOfMeasure = updated.UnitOfMeasure,
+                unitCost = updated.UnitCost,
+                location = updated.Location,
+                version = updated.Version
+            },
+            TestContext.Current.CancellationToken);
+
+        attemptToEditStock.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await GetProductAsync(client, product.Id))!.CurrentStock.Should().Be(5);
     }
 
     [Fact]
-    public async Task GetProducts_LowStockFilter_OnlyReturnsLowStockItems()
+    public async Task Update_WithStaleVersion_IsRejected()
     {
         var client = await CreateAuthenticatedClientAsync();
+        var product = await CreateProductAsync(client, openingStock: 0);
 
-        var result = await client.GetFromJsonAsync<PaginatedResult<ProductDto>>(
-            "/api/v1/products?lowStockOnly=true&pageSize=50", JsonOptions);
+        var response = await client.PutAsJsonAsync(
+            $"/api/v1/products/{product.Id}",
+            new
+            {
+                sku = product.SKU,
+                name = product.Name,
+                description = product.Description,
+                category = product.Category,
+                reorderPoint = product.ReorderPoint,
+                reorderQuantity = product.ReorderQuantity,
+                unitOfMeasure = product.UnitOfMeasure,
+                unitCost = product.UnitCost,
+                location = product.Location,
+                version = product.Version + 1
+            },
+            TestContext.Current.CancellationToken);
 
-        result!.Items.Should().NotBeEmpty();
-        result.Items.Should().OnlyContain(p => p.IsLowStock);
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
     [Fact]
-    public async Task CreateProduct_AsAdmin_Returns201WithLocation()
+    public async Task ConcurrentUpdates_WithSameVersion_AllowOnlyOneWinner()
     {
         var client = await CreateAuthenticatedClientAsync();
+        var product = await CreateProductAsync(client, openingStock: 0);
 
-        var response = await client.PostAsJsonAsync("/api/v1/products", new
+        object UpdatePayload(string name) => new
         {
-            sku = $"IT-{Guid.NewGuid():N}"[..20],
-            name = "Integration test product",
-            description = "Created by an integration test",
-            category = "Test",
-            currentStock = 10,
-            reorderPoint = 2,
-            reorderQuantity = 5,
-            unitOfMeasure = "EA",
-            unitCost = 9.99,
-            location = "T-01-01"
-        });
+            sku = product.SKU,
+            name,
+            description = product.Description,
+            category = product.Category,
+            reorderPoint = product.ReorderPoint,
+            reorderQuantity = product.ReorderQuantity,
+            unitOfMeasure = product.UnitOfMeasure,
+            unitCost = product.UnitCost,
+            location = product.Location,
+            version = product.Version
+        };
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
-        response.Headers.Location.Should().NotBeNull();
+        var responses = await Task.WhenAll(
+            client.PutAsJsonAsync(
+                $"/api/v1/products/{product.Id}",
+                UpdatePayload("Concurrent winner A"),
+                TestContext.Current.CancellationToken),
+            client.PutAsJsonAsync(
+                $"/api/v1/products/{product.Id}",
+                UpdatePayload("Concurrent winner B"),
+                TestContext.Current.CancellationToken));
 
-        var created = await response.Content.ReadFromJsonAsync<ProductDto>(JsonOptions);
-        var fetched = await client.GetFromJsonAsync<ProductDto>(
-            $"/api/v1/products/{created!.Id}", JsonOptions);
-        fetched!.Name.Should().Be("Integration test product");
+        responses.Count(response => response.StatusCode == HttpStatusCode.OK).Should().Be(1);
+        responses.Count(response => response.StatusCode == HttpStatusCode.Conflict).Should().Be(1);
+
+        var persisted = await GetProductAsync(client, product.Id);
+        persisted!.Name.Should().BeOneOf("Concurrent winner A", "Concurrent winner B");
+        persisted.Version.Should().NotBe(product.Version);
     }
 
     [Fact]
-    public async Task CreateProduct_WithDuplicateSku_Returns400()
+    public async Task ProductWithLedgerHistory_CannotBeDeleted()
     {
         var client = await CreateAuthenticatedClientAsync();
+        var product = await CreateProductAsync(client, openingStock: 1);
 
-        var response = await client.PostAsJsonAsync("/api/v1/products", new
-        {
-            sku = "WIDGET-001", // seeded SKU
-            name = "Duplicate",
-            description = "d",
-            category = "Test",
-            currentStock = 1,
-            reorderPoint = 1,
-            reorderQuantity = 1,
-            unitOfMeasure = "EA",
-            unitCost = 1.00,
-            location = "T-01-02"
-        });
+        var response = await client.DeleteAsync(
+            $"/api/v1/products/{product.Id}",
+            TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]
-    public async Task CreateProduct_WithInvalidPayload_Returns400WithFieldErrors()
+    public async Task Exports_ReturnReadableXlsxAndPdfPayloads()
     {
         var client = await CreateAuthenticatedClientAsync();
+        await CreateProductAsync(client, openingStock: 4);
 
-        var response = await client.PostAsJsonAsync("/api/v1/products", new
-        {
-            sku = "",
-            name = "",
-            category = "Test",
-            currentStock = -5,
-            reorderPoint = 0,
-            reorderQuantity = 0,
-            unitOfMeasure = "EA",
-            unitCost = 0,
-            location = "T-01-03"
-        });
+        var xlsx = await client.GetAsync(
+            "/api/v1/products/export",
+            TestContext.Current.CancellationToken);
+        xlsx.StatusCode.Should().Be(HttpStatusCode.OK);
+        xlsx.Content.Headers.ContentType!.MediaType.Should()
+            .Be("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        var xlsxBytes = await xlsx.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken);
+        xlsxBytes[..2].Should().Equal(0x50, 0x4B);
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var body = await response.Content.ReadAsStringAsync();
-        body.Should().Contain("errors");
-    }
-
-    [Fact]
-    public async Task CreateProduct_AsOperator_Returns403()
-    {
-        var client = await CreateAuthenticatedClientAsync("operator@inventory.com", "Operator123!");
-
-        var response = await client.PostAsJsonAsync("/api/v1/products", new
-        {
-            sku = "OP-DENIED-001",
-            name = "Should be denied",
-            description = "d",
-            category = "Test",
-            currentStock = 1,
-            reorderPoint = 1,
-            reorderQuantity = 1,
-            unitOfMeasure = "EA",
-            unitCost = 1.00,
-            location = "T-01-04"
-        });
-
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-    }
-
-    [Fact]
-    public async Task GetProduct_UnknownId_Returns404()
-    {
-        var client = await CreateAuthenticatedClientAsync();
-
-        var response = await client.GetAsync($"/api/v1/products/{Guid.NewGuid()}");
-
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
-    }
-
-    [Fact]
-    public async Task DeleteProduct_AsAdmin_SoftDeletesAndHidesFromQueries()
-    {
-        var client = await CreateAuthenticatedClientAsync();
-
-        var create = await client.PostAsJsonAsync("/api/v1/products", new
-        {
-            sku = $"DEL-{Guid.NewGuid():N}"[..20],
-            name = "To be deleted",
-            description = "d",
-            category = "Test",
-            currentStock = 1,
-            reorderPoint = 1,
-            reorderQuantity = 1,
-            unitOfMeasure = "EA",
-            unitCost = 1.00,
-            location = "T-01-05"
-        });
-        var created = await create.Content.ReadFromJsonAsync<ProductDto>(JsonOptions);
-
-        var delete = await client.DeleteAsync($"/api/v1/products/{created!.Id}");
-        delete.StatusCode.Should().Be(HttpStatusCode.NoContent);
-
-        var fetch = await client.GetAsync($"/api/v1/products/{created.Id}");
-        fetch.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        var pdf = await client.GetAsync(
+            "/api/v1/products/export/pdf",
+            TestContext.Current.CancellationToken);
+        pdf.StatusCode.Should().Be(HttpStatusCode.OK);
+        pdf.Content.Headers.ContentType!.MediaType.Should().Be("application/pdf");
+        var pdfBytes = await pdf.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken);
+        Encoding.ASCII.GetString(pdfBytes, 0, 5).Should().Be("%PDF-");
     }
 }

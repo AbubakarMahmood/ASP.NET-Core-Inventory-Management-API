@@ -28,7 +28,7 @@ public class RevokeTokenCommandHandler : IRequestHandler<RevokeTokenCommand, Uni
         var user = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
         if (user != null)
         {
-            user.RefreshToken = null;
+            user.RefreshTokenHash = null;
             user.RefreshTokenExpiryTime = null;
 
             _unitOfWork.Users.Update(user);

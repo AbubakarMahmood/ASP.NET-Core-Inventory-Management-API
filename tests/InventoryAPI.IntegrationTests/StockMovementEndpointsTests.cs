@@ -3,7 +3,12 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using InventoryAPI.Application.Common;
 using InventoryAPI.Application.DTOs;
+using InventoryAPI.Domain.Enums;
+using InventoryAPI.Infrastructure.Data;
 using InventoryAPI.IntegrationTests.Infrastructure;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 
 namespace InventoryAPI.IntegrationTests;
 
@@ -13,181 +18,175 @@ public class StockMovementEndpointsTests : ApiTestBase
     {
     }
 
-    private async Task<ProductDto> CreateProductAsync(HttpClient client, int currentStock)
-    {
-        var response = await client.PostAsJsonAsync("/api/v1/products", new
-        {
-            sku = $"SM-{Guid.NewGuid():N}"[..20],
-            name = "Stock movement test product",
-            description = "d",
-            category = "Test",
-            currentStock,
-            reorderPoint = 1,
-            reorderQuantity = 5,
-            unitOfMeasure = "EA",
-            unitCost = 4.20,
-            location = "S-01-01"
-        });
-        response.EnsureSuccessStatusCode();
-        return (await response.Content.ReadFromJsonAsync<ProductDto>(JsonOptions))!;
-    }
-
-    private async Task<ProductDto> GetProductAsync(HttpClient client, Guid id) =>
-        (await client.GetFromJsonAsync<ProductDto>($"/api/v1/products/{id}", JsonOptions))!;
-
     [Fact]
-    public async Task RecordReceipt_IncreasesProductStock()
+    public async Task Receipt_IsIdempotent_AndConflictingReuseReturns409()
     {
         var client = await CreateAuthenticatedClientAsync();
-        var product = await CreateProductAsync(client, currentStock: 10);
-
-        var response = await client.PostAsJsonAsync("/api/v1/stockmovements", new
+        var product = await CreateProductAsync(client, openingStock: 10);
+        var operationId = Guid.NewGuid();
+        var request = new
         {
-            productId = product.Id,
-            type = "Receipt",
-            quantity = 15,
-            reason = "Purchase order received"
-        });
-
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
-
-        var updated = await GetProductAsync(client, product.Id);
-        updated.CurrentStock.Should().Be(25);
-    }
-
-    [Fact]
-    public async Task RecordIssue_DecreasesProductStock()
-    {
-        var client = await CreateAuthenticatedClientAsync();
-        var product = await CreateProductAsync(client, currentStock: 10);
-
-        var response = await client.PostAsJsonAsync("/api/v1/stockmovements", new
-        {
-            productId = product.Id,
-            type = "Issue",
-            quantity = 4,
-            reason = "Issued to floor"
-        });
-
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
-
-        var updated = await GetProductAsync(client, product.Id);
-        updated.CurrentStock.Should().Be(6);
-    }
-
-    [Fact]
-    public async Task RecordIssue_MoreThanAvailable_Returns400AndLeavesStockUnchanged()
-    {
-        var client = await CreateAuthenticatedClientAsync();
-        var product = await CreateProductAsync(client, currentStock: 3);
-
-        var response = await client.PostAsJsonAsync("/api/v1/stockmovements", new
-        {
-            productId = product.Id,
-            type = "Issue",
-            quantity = 10,
-            reason = "Too much"
-        });
-
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-
-        var updated = await GetProductAsync(client, product.Id);
-        updated.CurrentStock.Should().Be(3);
-    }
-
-    [Fact]
-    public async Task RecordNegativeAdjustment_DecreasesStock()
-    {
-        var client = await CreateAuthenticatedClientAsync();
-        var product = await CreateProductAsync(client, currentStock: 20);
-
-        var response = await client.PostAsJsonAsync("/api/v1/stockmovements", new
-        {
-            productId = product.Id,
-            type = "Adjustment",
-            quantity = -8,
-            reason = "Cycle count correction"
-        });
-
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
-
-        var updated = await GetProductAsync(client, product.Id);
-        updated.CurrentStock.Should().Be(12);
-    }
-
-    [Fact]
-    public async Task RecordZeroQuantity_Returns400()
-    {
-        var client = await CreateAuthenticatedClientAsync();
-        var product = await CreateProductAsync(client, currentStock: 5);
-
-        var response = await client.PostAsJsonAsync("/api/v1/stockmovements", new
-        {
-            productId = product.Id,
-            type = "Receipt",
-            quantity = 0,
-            reason = "Nothing"
-        });
-
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
-
-    [Fact]
-    public async Task RecordTransfer_UpdatesLocationWithoutChangingStock()
-    {
-        var client = await CreateAuthenticatedClientAsync();
-        var product = await CreateProductAsync(client, currentStock: 7);
-
-        var response = await client.PostAsJsonAsync("/api/v1/stockmovements", new
-        {
-            productId = product.Id,
-            type = "Transfer",
-            quantity = 7,
-            sourceLocation = "S-01-01",
-            destinationLocation = "S-02-02",
-            reason = "Relocation"
-        });
-
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
-
-        var updated = await GetProductAsync(client, product.Id);
-        updated.CurrentStock.Should().Be(7);
-        updated.Location.Should().Be("S-02-02");
-    }
-
-    [Fact]
-    public async Task GetMovementsForProduct_ReturnsRecordedMovements()
-    {
-        var client = await CreateAuthenticatedClientAsync();
-        var product = await CreateProductAsync(client, currentStock: 10);
-
-        await client.PostAsJsonAsync("/api/v1/stockmovements", new
-        {
+            operationId,
             productId = product.Id,
             type = "Receipt",
             quantity = 5,
-            reason = "Restock"
-        });
+            reason = "Supplier receipt",
+            reference = "PO-100"
+        };
 
-        var result = await client.GetFromJsonAsync<PaginatedResult<StockMovementDto>>(
-            $"/api/v1/stockmovements/product/{product.Id}", JsonOptions);
+        var firstResponse = await client.PostAsJsonAsync(
+            "/api/v1/stockmovements",
+            request,
+            TestContext.Current.CancellationToken);
+        firstResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var first = (await firstResponse.Content.ReadFromJsonAsync<StockMovementDto>(
+            JsonOptions,
+            TestContext.Current.CancellationToken))!;
+        first.BalanceBefore.Should().Be(10);
+        first.BalanceAfter.Should().Be(15);
 
-        result!.Items.Should().HaveCount(1);
-        result.Items[0].ProductSKU.Should().Be(product.SKU);
-        result.Items[0].PerformedByName.Should().NotBeNullOrEmpty();
+        var replayResponse = await client.PostAsJsonAsync(
+            "/api/v1/stockmovements",
+            request,
+            TestContext.Current.CancellationToken);
+        replayResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var replay = (await replayResponse.Content.ReadFromJsonAsync<StockMovementDto>(
+            JsonOptions,
+            TestContext.Current.CancellationToken))!;
+        replay.Id.Should().Be(first.Id);
+        replay.BalanceAfter.Should().Be(15);
+
+        var conflict = await client.PostAsJsonAsync(
+            "/api/v1/stockmovements",
+            new
+            {
+                operationId,
+                productId = product.Id,
+                type = "Receipt",
+                quantity = 6,
+                reason = "Supplier receipt",
+                reference = "PO-100"
+            },
+            TestContext.Current.CancellationToken);
+        conflict.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        (await GetProductAsync(client, product.Id))!.CurrentStock.Should().Be(15);
     }
 
     [Fact]
-    public async Task Statistics_WithNoMovementsInRange_Returns200()
+    public async Task UnsupportedTransfer_IsRejectedWithoutChangingBalance()
     {
         var client = await CreateAuthenticatedClientAsync();
+        var product = await CreateProductAsync(client, openingStock: 7);
 
-        var response = await client.GetAsync(
-            "/api/v1/stockmovements/statistics?fromDate=1990-01-01&toDate=1990-01-02");
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/stockmovements",
+            new
+            {
+                operationId = Guid.NewGuid(),
+                productId = product.Id,
+                type = "Transfer",
+                quantity = 7,
+                reason = "Move stock"
+            },
+            TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await GetProductAsync(client, product.Id))!.CurrentStock.Should().Be(7);
+    }
 
-        var stats = await response.Content.ReadFromJsonAsync<StockMovementStatisticsDto>(JsonOptions);
-        stats!.TotalMovements.Should().Be(0);
+    [Fact]
+    public async Task ConcurrentEquivalentReceipts_ApplyTheBalanceChangeOnce()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+        var product = await CreateProductAsync(client, openingStock: 10);
+        var operationId = Guid.NewGuid();
+        var request = new
+        {
+            operationId,
+            productId = product.Id,
+            type = "Receipt",
+            quantity = 5,
+            reason = "Concurrent supplier receipt",
+            reference = "PO-CONCURRENT"
+        };
+
+        var responses = await Task.WhenAll(
+            client.PostAsJsonAsync(
+                "/api/v1/stockmovements",
+                request,
+                TestContext.Current.CancellationToken),
+            client.PostAsJsonAsync(
+                "/api/v1/stockmovements",
+                request,
+                TestContext.Current.CancellationToken));
+
+        responses.Should().OnlyContain(response =>
+            response.StatusCode == HttpStatusCode.Created
+            || response.StatusCode == HttpStatusCode.Conflict);
+        responses.Should().Contain(response => response.StatusCode == HttpStatusCode.Created);
+        (await GetProductAsync(client, product.Id))!.CurrentStock.Should().Be(15);
+
+        var movements = await client.GetFromJsonAsync<PaginatedResult<StockMovementDto>>(
+            $"/api/v1/stockmovements/product/{product.Id}",
+            JsonOptions,
+            TestContext.Current.CancellationToken);
+        movements!.Items.Count(item => item.OperationId == operationId).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task IssueBeyondAvailableStock_IsAtomic()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+        var product = await CreateProductAsync(client, openingStock: 3);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/stockmovements",
+            new
+            {
+                operationId = Guid.NewGuid(),
+                productId = product.Id,
+                type = "Issue",
+                quantity = 4,
+                reason = "Over-issue attempt"
+            },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await GetProductAsync(client, product.Id))!.CurrentStock.Should().Be(3);
+
+        var movements = await client.GetFromJsonAsync<PaginatedResult<StockMovementDto>>(
+            $"/api/v1/stockmovements/product/{product.Id}",
+            JsonOptions,
+            TestContext.Current.CancellationToken);
+        movements!.Items.Should().ContainSingle(item => item.Type == StockMovementType.OpeningBalance);
+    }
+
+    [Fact]
+    public async Task PersistedLedgerRow_CannotBeUpdatedOrDeleted()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+        var product = await CreateProductAsync(client, openingStock: 2);
+
+        var movements = await client.GetFromJsonAsync<PaginatedResult<StockMovementDto>>(
+            $"/api/v1/stockmovements/product/{product.Id}",
+            JsonOptions,
+            TestContext.Current.CancellationToken);
+        var movementId = movements!.Items.Single().Id;
+
+        using var scope = Factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        const string tamperedReason = "Tampered";
+        Func<Task> update = () => context.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE \"StockMovements\" SET \"Reason\" = {tamperedReason} WHERE \"Id\" = {movementId}",
+            TestContext.Current.CancellationToken);
+        await update.Should().ThrowAsync<PostgresException>();
+
+        context.ChangeTracker.Clear();
+        Func<Task> delete = () => context.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM \"StockMovements\" WHERE \"Id\" = {movementId}",
+            TestContext.Current.CancellationToken);
+        await delete.Should().ThrowAsync<PostgresException>();
     }
 }

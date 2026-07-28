@@ -1,6 +1,7 @@
-using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Application.Common;
 using InventoryAPI.Application.DTOs;
+using InventoryAPI.Application.Interfaces;
+using InventoryAPI.Application.Mappings;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,65 +16,48 @@ public class GetStockMovementsQueryHandler : IRequestHandler<GetStockMovementsQu
         _context = context;
     }
 
-    public async Task<PaginatedResult<StockMovementDto>> Handle(GetStockMovementsQuery request, CancellationToken cancellationToken)
+    public async Task<PaginatedResult<StockMovementDto>> Handle(
+        GetStockMovementsQuery request,
+        CancellationToken cancellationToken)
     {
         var query = _context.StockMovements
-            .Include(sm => sm.Product)
-            .Include(sm => sm.PerformedBy)
-            .Include(sm => sm.WorkOrder)
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Include(movement => movement.Product)
+            .Include(movement => movement.PerformedBy)
+            .Include(movement => movement.WorkOrder)
             .AsQueryable();
 
-        // Apply filters
         if (request.ProductId.HasValue)
         {
-            query = query.Where(sm => sm.ProductId == request.ProductId.Value);
+            query = query.Where(movement => movement.ProductId == request.ProductId.Value);
         }
 
         if (request.Type.HasValue)
         {
-            query = query.Where(sm => sm.Type == request.Type.Value);
+            query = query.Where(movement => movement.Type == request.Type.Value);
         }
 
         if (request.FromDate.HasValue)
         {
-            query = query.Where(sm => sm.Timestamp >= request.FromDate.Value);
+            query = query.Where(movement => movement.Timestamp >= request.FromDate.Value);
         }
 
         if (request.ToDate.HasValue)
         {
-            query = query.Where(sm => sm.Timestamp <= request.ToDate.Value);
+            query = query.Where(movement => movement.Timestamp <= request.ToDate.Value);
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
-
         var movements = await query
-            .OrderByDescending(sm => sm.Timestamp)
+            .OrderByDescending(movement => movement.Timestamp)
+            .ThenByDescending(movement => movement.Id)
             .Skip((request.PageNumber - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
 
-        var movementDtos = movements.Select(m => new StockMovementDto
-        {
-            Id = m.Id,
-            ProductId = m.ProductId,
-            ProductSKU = m.Product.SKU,
-            ProductName = m.Product.Name,
-            Type = m.Type,
-            Quantity = m.Quantity,
-            SourceLocation = m.SourceLocation,
-            DestinationLocation = m.DestinationLocation,
-            Reason = m.Reason,
-            Reference = m.Reference,
-            WorkOrderId = m.WorkOrderId,
-            WorkOrderNumber = m.WorkOrder?.OrderNumber,
-            PerformedById = m.PerformedById,
-            PerformedByName = m.PerformedBy.FullName,
-            Timestamp = m.Timestamp,
-            UnitCostAtTransaction = m.UnitCostAtTransaction
-        }).ToList();
-
         return new PaginatedResult<StockMovementDto>(
-            movementDtos,
+            movements.Select(movement => movement.ToDto()).ToList(),
             totalCount,
             request.PageNumber,
             request.PageSize);

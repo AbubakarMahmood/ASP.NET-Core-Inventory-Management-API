@@ -1,12 +1,13 @@
 using System.Net;
 using System.Text.Json;
-using InventoryAPI.Domain.Exceptions;
 using FluentValidation;
+using InventoryAPI.Domain.Exceptions;
+using Microsoft.EntityFrameworkCore;
 
 namespace InventoryAPI.Api.Middleware;
 
 /// <summary>
-/// Global exception handling middleware
+/// Global exception handling middleware.
 /// </summary>
 public class ExceptionHandlingMiddleware
 {
@@ -25,17 +26,36 @@ public class ExceptionHandlingMiddleware
         {
             await _next(context);
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            _logger.LogError(ex, "An unhandled exception occurred");
-            await HandleExceptionAsync(context, ex);
+            if (exception is DomainException
+                or FluentValidation.ValidationException
+                or UnauthorizedAccessException
+                or BadHttpRequestException
+                or DbUpdateConcurrencyException
+                or DbUpdateException)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Request failed with a handled application exception. TraceId: {TraceId}",
+                    context.TraceIdentifier);
+            }
+            else
+            {
+                _logger.LogError(
+                    exception,
+                    "Unhandled request exception. TraceId: {TraceId}",
+                    context.TraceIdentifier);
+            }
+
+            await HandleExceptionAsync(context, exception);
         }
     }
 
     private static async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
         var response = context.Response;
-        response.ContentType = "application/json";
+        response.ContentType = "application/problem+json";
 
         var errorResponse = new ErrorResponse
         {
@@ -46,40 +66,57 @@ public class ExceptionHandlingMiddleware
         switch (exception)
         {
             case NotFoundException:
-                response.StatusCode = (int)HttpStatusCode.NotFound;
+                response.StatusCode = StatusCodes.Status404NotFound;
                 break;
 
-            case Domain.Exceptions.ValidationException validationEx:
-                response.StatusCode = (int)HttpStatusCode.BadRequest;
-                errorResponse.Errors = validationEx.Errors;
+            case InventoryAPI.Domain.Exceptions.ValidationException validationException:
+                response.StatusCode = StatusCodes.Status400BadRequest;
+                errorResponse.Errors = validationException.Errors;
                 break;
 
-            case FluentValidation.ValidationException fluentValidationEx:
-                response.StatusCode = (int)HttpStatusCode.BadRequest;
-                errorResponse.Errors = fluentValidationEx.Errors
-                    .GroupBy(e => e.PropertyName)
+            case FluentValidation.ValidationException fluentValidationException:
+                response.StatusCode = StatusCodes.Status400BadRequest;
+                errorResponse.Errors = fluentValidationException.Errors
+                    .GroupBy(error => error.PropertyName)
                     .ToDictionary(
-                        g => g.Key,
-                        g => g.Select(e => e.ErrorMessage).ToArray()
-                    );
+                        group => group.Key,
+                        group => group.Select(error => error.ErrorMessage).ToArray());
+                break;
+
+            case IdempotencyConflictException:
+            case ConcurrencyConflictException:
+                response.StatusCode = StatusCodes.Status409Conflict;
                 break;
 
             case BusinessRuleViolationException:
-                response.StatusCode = (int)HttpStatusCode.BadRequest;
+                response.StatusCode = StatusCodes.Status400BadRequest;
                 break;
 
             case UnauthorizedAccessException:
-                response.StatusCode = (int)HttpStatusCode.Unauthorized;
+                response.StatusCode = StatusCodes.Status401Unauthorized;
+                errorResponse.Message = "Authentication failed.";
                 break;
 
-            case Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException:
-                response.StatusCode = (int)HttpStatusCode.Conflict;
-                errorResponse.Message = "The record was modified by another user. Please refresh and try again.";
+            case BadHttpRequestException badHttpRequestException:
+                response.StatusCode = badHttpRequestException.StatusCode;
+                errorResponse.Message = badHttpRequestException.StatusCode == StatusCodes.Status413PayloadTooLarge
+                    ? "Request body exceeds the allowed size."
+                    : "The request could not be processed.";
+                break;
+
+            case DbUpdateConcurrencyException:
+                response.StatusCode = StatusCodes.Status409Conflict;
+                errorResponse.Message = "The record was modified by another user. Refresh and retry.";
+                break;
+
+            case DbUpdateException:
+                response.StatusCode = StatusCodes.Status409Conflict;
+                errorResponse.Message = "The requested change conflicts with the current database state.";
                 break;
 
             default:
-                response.StatusCode = (int)HttpStatusCode.InternalServerError;
-                errorResponse.Message = "An internal server error occurred";
+                response.StatusCode = StatusCodes.Status500InternalServerError;
+                errorResponse.Message = "An internal server error occurred.";
                 break;
         }
 
@@ -93,7 +130,7 @@ public class ExceptionHandlingMiddleware
 }
 
 /// <summary>
-/// Standard error response format
+/// Standard error response format.
 /// </summary>
 public class ErrorResponse
 {

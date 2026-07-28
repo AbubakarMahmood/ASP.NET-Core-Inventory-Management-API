@@ -4,33 +4,37 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace InventoryAPI.Infrastructure.Data.Configurations;
 
-/// <summary>
-/// Entity configuration for WorkOrderItem
-/// </summary>
 public class WorkOrderItemConfiguration : IEntityTypeConfiguration<WorkOrderItem>
 {
     public void Configure(EntityTypeBuilder<WorkOrderItem> builder)
     {
-        builder.ToTable("WorkOrderItems");
+        builder.ToTable("WorkOrderItems", table =>
+        {
+            table.HasCheckConstraint("CK_WorkOrderItems_QuantityRequested_Positive", "\"QuantityRequested\" > 0");
+            table.HasCheckConstraint("CK_WorkOrderItems_QuantityIssued_Range",
+                "\"QuantityIssued\" >= 0 AND \"QuantityIssued\" <= \"QuantityRequested\"");
+        });
 
-        builder.HasKey(woi => woi.Id);
+        builder.HasQueryFilter(item =>
+            !item.Product.IsDeleted && !item.WorkOrder.IsDeleted);
 
-        builder.Property(woi => woi.Notes)
+        builder.HasKey(item => item.Id);
+
+        builder.Property(item => item.Notes)
             .HasMaxLength(1000);
 
-        // Relationships
-        builder.HasOne(woi => woi.WorkOrder)
-            .WithMany(wo => wo.Items)
-            .HasForeignKey(woi => woi.WorkOrderId)
+        builder.HasOne(item => item.WorkOrder)
+            .WithMany(order => order.Items)
+            .HasForeignKey(item => item.WorkOrderId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasOne(woi => woi.Product)
-            .WithMany(p => p.WorkOrderItems)
-            .HasForeignKey(woi => woi.ProductId)
+        builder.HasOne(item => item.Product)
+            .WithMany(product => product.WorkOrderItems)
+            .HasForeignKey(item => item.ProductId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Indexes
-        builder.HasIndex(woi => woi.WorkOrderId);
-        builder.HasIndex(woi => woi.ProductId);
+        builder.HasIndex(item => item.ProductId);
+        builder.HasIndex(item => new { item.WorkOrderId, item.ProductId })
+            .IsUnique();
     }
 }

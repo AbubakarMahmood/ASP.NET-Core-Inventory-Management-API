@@ -35,6 +35,7 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
         if (shouldIncludeProducts)
         {
             var products = await _context.Products
+                .IgnoreQueryFilters()
                 .AsNoTracking()
                 .Where(p => string.IsNullOrEmpty(request.PerformedBy) ||
                             p.CreatedBy.Contains(request.PerformedBy) ||
@@ -103,6 +104,7 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
         if (shouldIncludeWorkOrders)
         {
             var workOrders = await _context.WorkOrders
+                .IgnoreQueryFilters()
                 .AsNoTracking()
                 .Where(w => string.IsNullOrEmpty(request.PerformedBy) ||
                             w.CreatedBy.Contains(request.PerformedBy) ||
@@ -143,6 +145,25 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
                         PerformedBy = workOrder.ModifiedBy ?? "System"
                     });
                 }
+
+                if (workOrder.IsDeleted &&
+                    (string.IsNullOrEmpty(request.Action) || request.Action == "Deleted"))
+                {
+                    var deletedTimestamp = workOrder.DeletedAt ?? workOrder.ModifiedAt ?? workOrder.CreatedAt;
+                    if ((!request.FromDate.HasValue || deletedTimestamp >= request.FromDate.Value) &&
+                        (!toDate.HasValue || deletedTimestamp <= toDate.Value))
+                    {
+                        auditLogs.Add(new AuditLogDto
+                        {
+                            EntityType = "WorkOrder",
+                            EntityId = workOrder.Id,
+                            EntityIdentifier = $"{workOrder.OrderNumber} - {workOrder.Title}",
+                            Action = "Deleted",
+                            Timestamp = deletedTimestamp,
+                            PerformedBy = workOrder.DeletedBy ?? workOrder.ModifiedBy ?? "System"
+                        });
+                    }
+                }
             }
         }
 
@@ -150,6 +171,7 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
         if (shouldIncludeUsers)
         {
             var users = await _context.Users
+                .IgnoreQueryFilters()
                 .AsNoTracking()
                 .Where(u => string.IsNullOrEmpty(request.PerformedBy) ||
                             u.CreatedBy.Contains(request.PerformedBy) ||
@@ -190,6 +212,25 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
                         PerformedBy = user.ModifiedBy ?? "System"
                     });
                 }
+
+                if (user.IsDeleted &&
+                    (string.IsNullOrEmpty(request.Action) || request.Action == "Deleted"))
+                {
+                    var deletedTimestamp = user.DeletedAt ?? user.ModifiedAt ?? user.CreatedAt;
+                    if ((!request.FromDate.HasValue || deletedTimestamp >= request.FromDate.Value) &&
+                        (!toDate.HasValue || deletedTimestamp <= toDate.Value))
+                    {
+                        auditLogs.Add(new AuditLogDto
+                        {
+                            EntityType = "User",
+                            EntityId = user.Id,
+                            EntityIdentifier = $"{user.Email} - {user.FullName}",
+                            Action = "Deleted",
+                            Timestamp = deletedTimestamp,
+                            PerformedBy = user.DeletedBy ?? user.ModifiedBy ?? "System"
+                        });
+                    }
+                }
             }
         }
 
@@ -197,6 +238,7 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
         if (shouldIncludeStockMovements)
         {
             var movements = await _context.StockMovements
+                .IgnoreQueryFilters()
                 .Include(s => s.Product)
                 .AsNoTracking()
                 .Where(s => !request.FromDate.HasValue || s.Timestamp >= request.FromDate.Value)

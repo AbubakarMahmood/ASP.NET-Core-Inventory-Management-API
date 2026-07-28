@@ -5,11 +5,19 @@ namespace InventoryAPI.Application.DTOs;
 public class StockMovementDto
 {
     public Guid Id { get; set; }
+    public Guid OperationId { get; set; }
     public Guid ProductId { get; set; }
     public string ProductSKU { get; set; } = string.Empty;
     public string ProductName { get; set; } = string.Empty;
+    public string UnitOfMeasure { get; set; } = string.Empty;
     public StockMovementType Type { get; set; }
     public int Quantity { get; set; }
+
+    /// <summary>The signed change applied to the cached product balance.</summary>
+    public int QuantityDelta { get; set; }
+
+    public int BalanceBefore { get; set; }
+    public int BalanceAfter { get; set; }
     public string SourceLocation { get; set; } = string.Empty;
     public string DestinationLocation { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;

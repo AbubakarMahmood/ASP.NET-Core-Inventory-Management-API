@@ -1,12 +1,10 @@
-using InventoryAPI.Application.Commands.Products;
 using InventoryAPI.Application.DTOs;
 using InventoryAPI.Domain.Entities;
 
 namespace InventoryAPI.Application.Mappings;
 
 /// <summary>
-/// Explicit entity-to-DTO mapping. Kept as plain extension methods so the
-/// mappings are compile-time checked and trivially debuggable.
+/// Explicit, compile-time-checked entity-to-DTO mappings.
 /// </summary>
 public static class MappingExtensions
 {
@@ -23,39 +21,24 @@ public static class MappingExtensions
         UnitOfMeasure = product.UnitOfMeasure,
         UnitCost = product.UnitCost,
         Location = product.Location,
-        CostingMethod = product.CostingMethod,
         IsLowStock = product.IsLowStock(),
         CreatedAt = product.CreatedAt,
         Version = product.Version
     };
 
-    public static Product ToEntity(this CreateProductCommand command) => new()
-    {
-        SKU = command.SKU,
-        Name = command.Name,
-        Description = command.Description,
-        Category = command.Category,
-        CurrentStock = command.CurrentStock,
-        ReorderPoint = command.ReorderPoint,
-        ReorderQuantity = command.ReorderQuantity,
-        UnitOfMeasure = command.UnitOfMeasure,
-        UnitCost = command.UnitCost,
-        Location = command.Location,
-        CostingMethod = command.CostingMethod
-    };
-
-    /// <summary>
-    /// Maps a stock movement. Product/PerformedBy/WorkOrder navigation
-    /// properties populate the denormalized fields when they are loaded.
-    /// </summary>
     public static StockMovementDto ToDto(this StockMovement movement) => new()
     {
         Id = movement.Id,
+        OperationId = movement.OperationId,
         ProductId = movement.ProductId,
         ProductSKU = movement.Product?.SKU ?? string.Empty,
         ProductName = movement.Product?.Name ?? string.Empty,
+        UnitOfMeasure = movement.Product?.UnitOfMeasure ?? string.Empty,
         Type = movement.Type,
         Quantity = movement.Quantity,
+        QuantityDelta = StockMovement.CalculateQuantityDelta(movement.Type, movement.Quantity),
+        BalanceBefore = movement.BalanceBefore,
+        BalanceAfter = movement.BalanceAfter,
         SourceLocation = movement.SourceLocation,
         DestinationLocation = movement.DestinationLocation,
         Reason = movement.Reason,
@@ -68,10 +51,6 @@ public static class MappingExtensions
         UnitCostAtTransaction = movement.UnitCostAtTransaction
     };
 
-    /// <summary>
-    /// Maps a work order with its items. RequestedBy/AssignedTo and each
-    /// item's Product must be loaded for the related fields to populate.
-    /// </summary>
     public static WorkOrderDto ToDto(this WorkOrder workOrder) => new()
     {
         Id = workOrder.Id,
@@ -83,6 +62,7 @@ public static class MappingExtensions
         DueDate = workOrder.DueDate,
         CompletedDate = workOrder.CompletedDate,
         RejectionReason = workOrder.RejectionReason,
+        IsFullyIssued = workOrder.IsFullyIssued,
         RequestedById = workOrder.RequestedById,
         RequestedByName = workOrder.RequestedBy?.FullName ?? string.Empty,
         RequestedByEmail = workOrder.RequestedBy?.Email ?? string.Empty,
@@ -107,6 +87,8 @@ public static class MappingExtensions
         CurrentStock = item.Product?.CurrentStock ?? 0,
         QuantityRequested = item.QuantityRequested,
         QuantityIssued = item.QuantityIssued,
+        RemainingQuantity = item.RemainingQuantity,
+        IsFullyIssued = item.IsFullyIssued,
         Notes = item.Notes
     };
 

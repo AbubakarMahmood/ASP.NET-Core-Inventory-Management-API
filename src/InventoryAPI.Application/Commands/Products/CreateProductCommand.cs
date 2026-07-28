@@ -1,11 +1,11 @@
 using InventoryAPI.Application.DTOs;
-using InventoryAPI.Domain.Enums;
 using MediatR;
 
 namespace InventoryAPI.Application.Commands.Products;
 
 /// <summary>
-/// Create product command
+/// Creates a catalog product. Any non-zero opening quantity is posted as an
+/// immutable OpeningBalance movement in the same database commit.
 /// </summary>
 public class CreateProductCommand : IRequest<ProductDto>
 {
@@ -13,11 +13,10 @@ public class CreateProductCommand : IRequest<ProductDto>
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string Category { get; set; } = string.Empty;
-    public int CurrentStock { get; set; }
+    public int OpeningStock { get; set; }
     public int ReorderPoint { get; set; }
     public int ReorderQuantity { get; set; }
     public string UnitOfMeasure { get; set; } = string.Empty;
     public decimal UnitCost { get; set; }
     public string Location { get; set; } = string.Empty;
-    public CostingMethod CostingMethod { get; set; } = CostingMethod.Average;
 }

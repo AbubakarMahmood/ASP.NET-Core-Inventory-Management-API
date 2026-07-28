@@ -13,14 +13,7 @@ public class ProductDto
     public string UnitOfMeasure { get; set; } = string.Empty;
     public decimal UnitCost { get; set; }
     public string Location { get; set; } = string.Empty;
-    public CostingMethod CostingMethod { get; set; }
     public bool IsLowStock { get; set; }
     public DateTime CreatedAt { get; set; }
-}
-
-public enum CostingMethod
-{
-    FIFO = 1,
-    LIFO = 2,
-    Average = 3
+    public uint Version { get; set; }
 }

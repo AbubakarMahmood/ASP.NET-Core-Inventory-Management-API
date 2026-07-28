@@ -3,15 +3,12 @@ using InventoryAPI.Application.Commands.Products;
 
 namespace InventoryAPI.Application.Validators;
 
-/// <summary>
-/// Validator for UpdateProductCommand
-/// </summary>
 public class UpdateProductCommandValidator : AbstractValidator<UpdateProductCommand>
 {
     public UpdateProductCommandValidator()
     {
-        RuleFor(x => x.Id)
-            .NotEmpty().WithMessage("Product id is required");
+        RuleFor(x => x.Id).NotEmpty().WithMessage("Product id is required");
+        RuleFor(x => x.Version).NotNull().WithMessage("Version is required for concurrency-safe updates");
 
         RuleFor(x => x.SKU)
             .NotEmpty().WithMessage("SKU is required")
@@ -21,12 +18,12 @@ public class UpdateProductCommandValidator : AbstractValidator<UpdateProductComm
             .NotEmpty().WithMessage("Name is required")
             .MaximumLength(200).WithMessage("Name cannot exceed 200 characters");
 
+        RuleFor(x => x.Description)
+            .MaximumLength(1000).WithMessage("Description cannot exceed 1000 characters");
+
         RuleFor(x => x.Category)
             .NotEmpty().WithMessage("Category is required")
             .MaximumLength(100).WithMessage("Category cannot exceed 100 characters");
-
-        RuleFor(x => x.CurrentStock)
-            .GreaterThanOrEqualTo(0).WithMessage("Current stock cannot be negative");
 
         RuleFor(x => x.ReorderPoint)
             .GreaterThanOrEqualTo(0).WithMessage("Reorder point cannot be negative");
@@ -39,7 +36,7 @@ public class UpdateProductCommandValidator : AbstractValidator<UpdateProductComm
             .MaximumLength(20).WithMessage("Unit of measure cannot exceed 20 characters");
 
         RuleFor(x => x.UnitCost)
-            .GreaterThan(0).WithMessage("Unit cost must be greater than zero");
+            .GreaterThanOrEqualTo(0).WithMessage("Unit cost cannot be negative");
 
         RuleFor(x => x.Location)
             .NotEmpty().WithMessage("Location is required")

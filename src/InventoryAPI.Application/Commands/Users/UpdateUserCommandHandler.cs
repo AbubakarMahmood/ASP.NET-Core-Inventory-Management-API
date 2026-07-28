@@ -75,7 +75,7 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
 
         // Invalidate any outstanding refresh token so the password change takes
         // effect immediately.
-        user.RefreshToken = null;
+        user.RefreshTokenHash = null;
         user.RefreshTokenExpiryTime = null;
 
         _unitOfWork.Users.Update(user);
@@ -101,6 +101,20 @@ public class DeleteUserCommandHandler : IRequestHandler<DeleteUserCommand, bool>
     {
         var user = await _unitOfWork.Users.GetByIdAsync(request.UserId, cancellationToken)
             ?? throw new NotFoundException(nameof(User), request.UserId);
+
+        var hasLedgerHistory = await _unitOfWork.StockMovements
+            .AnyAsync(movement => movement.PerformedById == request.UserId, cancellationToken);
+        var hasWorkOrderHistory = await _unitOfWork.WorkOrders
+            .AnyAsync(
+                workOrder => workOrder.RequestedById == request.UserId
+                    || workOrder.AssignedToId == request.UserId,
+                cancellationToken);
+
+        if (hasLedgerHistory || hasWorkOrderHistory)
+        {
+            throw new BusinessRuleViolationException(
+                "Users referenced by stock movements or work orders cannot be deleted. Deactivate the account to preserve historical attribution.");
+        }
 
         _unitOfWork.Users.Remove(user); // Soft delete via BaseAuditableEntity
         await _unitOfWork.SaveChangesAsync(cancellationToken);

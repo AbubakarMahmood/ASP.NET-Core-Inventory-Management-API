@@ -1,5 +1,7 @@
 using System.Reflection;
 using System.Text;
+using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using FluentValidation;
 using InventoryAPI.Api.Middleware;
 using InventoryAPI.Api.Services;
@@ -11,6 +13,7 @@ using InventoryAPI.Infrastructure.Services;
 using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -18,12 +21,17 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 1_048_576;
+});
+
 // Serilog
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
     .WriteTo.Console()
-    .WriteTo.File("logs/inventory-api-.txt", rollingInterval: RollingInterval.Day)
+    .WriteTo.File("logs/stockverity-api-.txt", rollingInterval: RollingInterval.Day)
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -31,9 +39,11 @@ builder.Host.UseSerilog();
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        // Accept and emit enum names ("Receipt") rather than bare numbers
+        options.JsonSerializerOptions.MaxDepth = 32;
+        options.JsonSerializerOptions.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow;
+        // Accept and emit enum names ("Receipt") rather than ambiguous bare numbers.
         options.JsonSerializerOptions.Converters.Add(
-            new System.Text.Json.Serialization.JsonStringEnumConverter());
+            new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false));
     });
 
 builder.Services.AddSignalR();
@@ -46,12 +56,17 @@ var dataProtectionPath = builder.Configuration["DataProtection:KeysPath"]
 Directory.CreateDirectory(dataProtectionPath);
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
-    .SetApplicationName("InventoryAPI");
+    .SetApplicationName("StockVerity");
 
 // Database with connection resilience
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not configured.");
+    }
+
     options.UseNpgsql(connectionString, npgsqlOptions =>
     {
         npgsqlOptions.EnableRetryOnFailure(
@@ -72,6 +87,7 @@ builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 // Services
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddSingleton<IRefreshTokenHasher, RefreshTokenHasher>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
 builder.Services.AddScoped<IPdfExportService, PdfExportService>();
@@ -101,6 +117,25 @@ if (secretKey.Length < 32)
     throw new InvalidOperationException("JwtSettings:SecretKey must be at least 32 characters.");
 }
 
+var jwtIssuer = jwtSettings["Issuer"];
+var jwtAudience = jwtSettings["Audience"];
+if (string.IsNullOrWhiteSpace(jwtIssuer) || string.IsNullOrWhiteSpace(jwtAudience))
+{
+    throw new InvalidOperationException("JwtSettings:Issuer and JwtSettings:Audience are required.");
+}
+
+if (!int.TryParse(jwtSettings["ExpiryMinutes"], out var accessTokenMinutes)
+    || accessTokenMinutes is < 1 or > 1_440)
+{
+    throw new InvalidOperationException("JwtSettings:ExpiryMinutes must be between 1 and 1440.");
+}
+
+if (!int.TryParse(jwtSettings["RefreshTokenExpiryDays"], out var refreshTokenDays)
+    || refreshTokenDays is < 1 or > 90)
+{
+    throw new InvalidOperationException("JwtSettings:RefreshTokenExpiryDays must be between 1 and 90.");
+}
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -118,8 +153,8 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"],
-        ValidAudience = jwtSettings["Audience"],
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtAudience,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
         ClockSkew = TimeSpan.Zero
     };
@@ -145,6 +180,21 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+});
 
 // CORS: origins come from configuration so deployments can restrict them
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
@@ -175,18 +225,19 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title = "Inventory Management API",
+        Title = "StockVerity API",
         Version = "v1",
-        Description = "REST API for inventory and work order management"
+        Description = "Auditable single-location inventory ledger and work-order fulfilment API"
     });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token",
+        Description = "JWT access token",
         Name = "Authorization",
         In = ParameterLocation.Header,
-        Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT"
     });
 
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -220,96 +271,85 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
-// Swagger is enabled in all environments: this API's deployments are demos
-// and the interactive documentation is part of the product.
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+var openApiEnabled = builder.Configuration.GetValue<bool>("OpenApi:Enabled");
+if (openApiEnabled)
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Inventory API v1");
-    c.RoutePrefix = "swagger";
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "StockVerity API v1");
+        options.RoutePrefix = "swagger";
+    });
+}
 
-// Database startup strategy:
-//  - Development: apply migrations and seed automatically.
-//  - Production: verify the schema is current and fail fast if it is not.
+// Database startup is fail-closed in every environment. Applying migrations and
+// seeding demo data are explicit configuration choices, never environment side effects.
 using (var scope = app.Services.CreateScope())
 {
     var databaseService = scope.ServiceProvider.GetRequiredService<IDatabaseInitializationService>();
+    var result = await databaseService.InitializeAsync();
 
-    try
+    if (!result.Success)
     {
-        if (app.Environment.IsDevelopment())
+        if (result.PendingMigrations.Any())
         {
-            var result = await databaseService.InitializeAsync();
-
-            if (result.Success)
-            {
-                Log.Information(
-                    "Database ready. Migration: {Migration}, applied: {Applied}, seeded: {Seeded}, took {Time}ms",
-                    result.CurrentMigration, result.TotalMigrationsApplied, result.DataSeeded, result.InitializationTimeMs);
-            }
-            else
-            {
-                Log.Warning("Database initialization failed: {Error}. The API will start but may not function.",
-                    result.ErrorMessage ?? "Unknown");
-            }
+            Log.Fatal(
+                "Pending migrations: {Migrations}. Enable Database:ApplyMigrations for an intentional demo deployment, " +
+                "or apply them before starting the API.",
+                string.Join(", ", result.PendingMigrations));
         }
-        else
-        {
-            var result = await databaseService.VerifyAsync();
 
-            if (!result.Success)
-            {
-                if (result.PendingMigrations.Any())
-                {
-                    Log.Fatal("Pending migrations: {Migrations}. Apply them before starting: " +
-                              "dotnet ef database update --project src/InventoryAPI.Infrastructure --startup-project src/InventoryAPI.Api",
-                        string.Join(", ", result.PendingMigrations));
-                }
+        throw new InvalidOperationException(
+            $"Database is not ready: {result.ErrorMessage ?? "unknown error"}.");
+    }
 
-                throw new InvalidOperationException(
-                    $"Database is not ready: {result.ErrorMessage ?? "unknown error"}. " +
-                    "Apply all pending migrations before starting the application.");
-            }
-
-            Log.Information("Database verified. Migration: {Migration}", result.CurrentMigration);
-        }
-    }
-    catch (Exception ex) when (!app.Environment.IsDevelopment())
-    {
-        Log.Fatal(ex, "Startup aborted: database is not ready");
-        throw;
-    }
-    catch (Exception ex)
-    {
-        Log.Error(ex, "Database initialization failed; continuing so the failure can be diagnosed via /api/v1/health");
-    }
+    Log.Information(
+        "Database ready. Migration: {Migration}, applied: {Applied}, seeded: {Seeded}, took {Time}ms",
+        result.CurrentMigration, result.TotalMigrationsApplied, result.DataSeeded, result.InitializationTimeMs);
 }
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseSerilogRequestLogging();
 
-if (!app.Environment.IsDevelopment())
+var httpsRedirectionEnabled = builder.Configuration.GetValue(
+    "HttpsRedirection:Enabled",
+    !app.Environment.IsDevelopment());
+if (httpsRedirectionEnabled)
 {
     app.UseHttpsRedirection();
 }
 
 app.UseCors("Default");
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
-// The interactive documentation is this API's landing page
-app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
+app.MapGet("/", IResult () =>
+    openApiEnabled
+        ? Results.Redirect("/swagger")
+        : Results.Ok(new { service = "StockVerity API", status = "running" }))
+    .ExcludeFromDescription();
 
 app.MapHub<InventoryAPI.Api.Hubs.NotificationHub>("/api/v1/notifications");
 
-app.MapHealthChecks("/api/v1/health");
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false
+});
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("ready")
+});
+app.MapHealthChecks("/api/v1/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("ready")
+});
 
-Log.Information("Starting Inventory Management API");
+Log.Information("Starting StockVerity API");
 
 app.Run();
 

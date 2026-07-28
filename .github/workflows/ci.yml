@@ -1,4 +1,4 @@
-name: CI
+name: verify
 
 on:
   push:
@@ -6,17 +6,45 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      STOCKVERITY_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=postgres;Username=postgres;Password=postgres
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up .NET 8
-        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          persist-credentials: false
+
+      - name: Set up pinned .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/*.csproj'
 
       - name: Restore
         run: dotnet restore InventoryAPI.sln
@@ -27,17 +55,22 @@ jobs:
       - name: Unit tests
         run: dotnet test tests/InventoryAPI.UnitTests -c Release --no-build --logger "console;verbosity=minimal"
 
-      - name: Integration tests
+      - name: PostgreSQL HTTP integration tests
         run: dotnet test tests/InventoryAPI.IntegrationTests -c Release --no-build --logger "console;verbosity=minimal"
 
-  docker-build:
+      - name: Publish API and web client
+        run: |
+          dotnet publish src/InventoryAPI.Api/InventoryAPI.Api.csproj -c Release --no-build -o artifacts/api
+          dotnet publish src/InventoryAPI.BlazorUI/InventoryAPI.BlazorUI.csproj -c Release --no-build -o artifacts/ui
+
+  compose-smoke:
+    needs: build-and-test
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build API image
-        run: docker build -t inventory-api .
-
-      - name: Build UI image
-        run: docker build -f Dockerfile.blazor -t inventory-ui .
+        with:
+          persist-credentials: false
+      - name: Build and exercise the full stack
+        run: ./scripts/smoke-compose.sh

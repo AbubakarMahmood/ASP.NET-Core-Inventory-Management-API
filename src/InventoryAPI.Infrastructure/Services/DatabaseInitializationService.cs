@@ -2,6 +2,7 @@ using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Application.Models;
 using InventoryAPI.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace InventoryAPI.Infrastructure.Services;
@@ -14,19 +15,24 @@ public class DatabaseInitializationService : IDatabaseInitializationService
     private readonly ApplicationDbContext _context;
     private readonly IPasswordService _passwordService;
     private readonly ILogger<DatabaseInitializationService> _logger;
+    private readonly bool _applyMigrations;
+    private readonly bool _seedDemoData;
 
     public DatabaseInitializationService(
         ApplicationDbContext context,
         IPasswordService passwordService,
+        IConfiguration configuration,
         ILogger<DatabaseInitializationService> logger)
     {
         _context = context;
         _passwordService = passwordService;
         _logger = logger;
+        _applyMigrations = configuration.GetValue<bool>("Database:ApplyMigrations");
+        _seedDemoData = configuration.GetValue<bool>("DemoData:Enabled");
     }
 
     /// <summary>
-    /// Initializes database with retry logic - for Development environment
+    /// Initializes and verifies the database according to explicit configuration flags
     /// </summary>
     public async Task<DatabaseInitializationResult> InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -56,9 +62,19 @@ public class DatabaseInitializationService : IDatabaseInitializationService
 
             if (result.PendingMigrationsCount > 0)
             {
-                _logger.LogInformation($"Found {result.PendingMigrationsCount} pending migration(s): {string.Join(", ", result.PendingMigrations)}");
+                _logger.LogInformation(
+                    "Found {Count} pending migration(s): {Migrations}",
+                    result.PendingMigrationsCount,
+                    string.Join(", ", result.PendingMigrations));
 
-                // Step 3: Apply migrations
+                if (!_applyMigrations)
+                {
+                    result.Success = false;
+                    result.ErrorMessage =
+                        "Pending migrations exist and Database:ApplyMigrations is disabled.";
+                    return result;
+                }
+
                 try
                 {
                     await _context.Database.MigrateAsync(cancellationToken);
@@ -85,17 +101,25 @@ public class DatabaseInitializationService : IDatabaseInitializationService
 
             _logger.LogInformation($"Current migration version: {result.CurrentMigration}");
 
-            // Step 5: Seed data
-            try
+            if (_seedDemoData)
             {
-                await DatabaseSeeder.SeedAsync(_context, _passwordService);
-                result.DataSeeded = true;
-                _logger.LogInformation("Database seeded successfully");
+                try
+                {
+                    await DatabaseSeeder.SeedAsync(_context, _passwordService);
+                    result.DataSeeded = true;
+                    _logger.LogInformation("Explicitly enabled demo data was seeded successfully");
+                }
+                catch (Exception ex)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"Demo data seeding failed: {ex.Message}";
+                    _logger.LogError(ex, "Demo data seeding failed");
+                    return result;
+                }
             }
-            catch (Exception ex)
+            else
             {
-                // Don't fail initialization if seeding fails
-                _logger.LogWarning(ex, "Warning: Database seeding encountered issues but initialization will continue");
+                _logger.LogInformation("Demo data seeding is disabled");
             }
 
             result.Success = true;
@@ -119,7 +143,7 @@ public class DatabaseInitializationService : IDatabaseInitializationService
     }
 
     /// <summary>
-    /// Verifies database is ready - for Production environment
+    /// Verifies that the database is reachable and has no pending migrations
     /// </summary>
     public async Task<DatabaseInitializationResult> VerifyAsync(CancellationToken cancellationToken = default)
     {
@@ -128,7 +152,7 @@ public class DatabaseInitializationService : IDatabaseInitializationService
 
         try
         {
-            _logger.LogInformation("Verifying database state (Production mode)...");
+            _logger.LogInformation("Verifying database state...");
 
             // Check connection
             result.CanConnect = await CheckConnectionWithRetryAsync(cancellationToken);
@@ -136,7 +160,7 @@ public class DatabaseInitializationService : IDatabaseInitializationService
             {
                 result.Success = false;
                 result.ErrorMessage = "Cannot connect to database";
-                _logger.LogCritical("PRODUCTION STARTUP FAILED: Unable to connect to database");
+                _logger.LogCritical("Unable to connect to database");
                 return result;
             }
 
@@ -149,7 +173,7 @@ public class DatabaseInitializationService : IDatabaseInitializationService
             {
                 result.Success = false;
                 result.ErrorMessage = $"Database has {result.PendingMigrationsCount} pending migration(s). Migrations must be applied before starting in Production.";
-                _logger.LogCritical("PRODUCTION STARTUP FAILED: Pending migrations detected: {Migrations}",
+                _logger.LogCritical("Pending migrations detected: {Migrations}",
                     string.Join(", ", result.PendingMigrations));
                 return result;
             }
@@ -174,7 +198,7 @@ public class DatabaseInitializationService : IDatabaseInitializationService
             stopwatch.Stop();
             result.InitializationTimeMs = stopwatch.ElapsedMilliseconds;
 
-            _logger.LogCritical(ex, "PRODUCTION STARTUP FAILED: Database verification error");
+            _logger.LogCritical(ex, "Database verification error");
             return result;
         }
     }

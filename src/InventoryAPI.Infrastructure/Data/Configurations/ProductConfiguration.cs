@@ -5,52 +5,57 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace InventoryAPI.Infrastructure.Data.Configurations;
 
 /// <summary>
-/// Entity configuration for Product. Relationships to WorkOrderItem and
-/// StockMovement are configured on the dependent side.
+/// Entity configuration for a single-location catalog item whose CurrentStock
+/// value is a cached projection of the append-only stock ledger.
 /// </summary>
 public class ProductConfiguration : IEntityTypeConfiguration<Product>
 {
     public void Configure(EntityTypeBuilder<Product> builder)
     {
-        builder.ToTable("Products");
+        builder.ToTable("Products", table =>
+        {
+            table.HasCheckConstraint("CK_Products_CurrentStock_NonNegative", "\"CurrentStock\" >= 0");
+            table.HasCheckConstraint("CK_Products_ReorderPoint_NonNegative", "\"ReorderPoint\" >= 0");
+            table.HasCheckConstraint("CK_Products_ReorderQuantity_Positive", "\"ReorderQuantity\" > 0");
+            table.HasCheckConstraint("CK_Products_UnitCost_NonNegative", "\"UnitCost\" >= 0");
+        });
 
-        builder.HasKey(p => p.Id);
+        builder.HasKey(product => product.Id);
 
-        builder.Property(p => p.SKU)
+        builder.Property(product => product.SKU)
             .IsRequired()
             .HasMaxLength(50);
 
-        builder.Property(p => p.Name)
+        builder.Property(product => product.Name)
             .IsRequired()
             .HasMaxLength(200);
 
-        builder.Property(p => p.Description)
+        builder.Property(product => product.Description)
             .HasMaxLength(1000);
 
-        builder.Property(p => p.Category)
+        builder.Property(product => product.Category)
             .IsRequired()
             .HasMaxLength(100);
 
-        builder.Property(p => p.UnitOfMeasure)
+        builder.Property(product => product.UnitOfMeasure)
             .IsRequired()
             .HasMaxLength(20);
 
-        builder.Property(p => p.UnitCost)
+        builder.Property(product => product.UnitCost)
             .HasPrecision(18, 2);
 
-        builder.Property(p => p.Location)
+        builder.Property(product => product.Location)
             .IsRequired()
             .HasMaxLength(100);
 
-        builder.Property(p => p.CreatedBy)
+        builder.Property(product => product.CreatedBy)
             .IsRequired();
 
-        // Indexes
-        builder.HasIndex(p => p.SKU)
+        builder.HasIndex(product => product.SKU)
             .IsUnique();
 
-        builder.HasIndex(p => p.Category);
-        builder.HasIndex(p => p.CurrentStock);
-        builder.HasIndex(p => new { p.Category, p.CurrentStock });
+        builder.HasIndex(product => product.Category);
+        builder.HasIndex(product => product.CurrentStock);
+        builder.HasIndex(product => new { product.Category, product.CurrentStock });
     }
 }

@@ -14,7 +14,8 @@ public class User : BaseAuditableEntity
     public string LastName { get; set; } = string.Empty;
     public UserRole Role { get; set; } = UserRole.Operator;
     public bool IsActive { get; set; } = true;
-    public string? RefreshToken { get; set; }
+    /// <summary>SHA-256 hash of the current refresh token; the raw token is never persisted.</summary>
+    public string? RefreshTokenHash { get; set; }
     public DateTime? RefreshTokenExpiryTime { get; set; }
 
     // Navigation properties

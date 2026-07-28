@@ -35,7 +35,7 @@ public class StockMovementsController : ControllerBase
     /// <param name="pageNumber">Page number (default: 1)</param>
     /// <param name="pageSize">Page size (default: 20)</param>
     /// <param name="productId">Filter by product ID</param>
-    /// <param name="type">Filter by movement type (Receipt, Issue, Adjustment, Transfer, Return)</param>
+    /// <param name="type">Filter by movement type (Receipt, Issue, Adjustment, Return; historical Transfer rows remain queryable)</param>
     /// <param name="fromDate">Filter movements from this date</param>
     /// <param name="toDate">Filter movements to this date</param>
     /// <param name="cancellationToken">Cancellation token</param>

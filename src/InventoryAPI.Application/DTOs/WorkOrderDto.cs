@@ -2,9 +2,6 @@ using InventoryAPI.Domain.Enums;
 
 namespace InventoryAPI.Application.DTOs;
 
-/// <summary>
-/// Work Order data transfer object
-/// </summary>
 public class WorkOrderDto
 {
     public Guid Id { get; set; }
@@ -16,8 +13,8 @@ public class WorkOrderDto
     public DateTime? DueDate { get; set; }
     public DateTime? CompletedDate { get; set; }
     public string? RejectionReason { get; set; }
+    public bool IsFullyIssued { get; set; }
 
-    // User information
     public Guid RequestedById { get; set; }
     public string RequestedByName { get; set; } = string.Empty;
     public string RequestedByEmail { get; set; } = string.Empty;
@@ -25,19 +22,14 @@ public class WorkOrderDto
     public string? AssignedToName { get; set; }
     public string? AssignedToEmail { get; set; }
 
-    // Items
     public List<WorkOrderItemDto> Items { get; set; } = new();
 
-    // Audit
     public DateTime CreatedAt { get; set; }
     public string CreatedBy { get; set; } = string.Empty;
     public DateTime? ModifiedAt { get; set; }
     public string? ModifiedBy { get; set; }
 }
 
-/// <summary>
-/// Work Order Item data transfer object
-/// </summary>
 public class WorkOrderItemDto
 {
     public Guid Id { get; set; }
@@ -49,5 +41,7 @@ public class WorkOrderItemDto
     public int CurrentStock { get; set; }
     public int QuantityRequested { get; set; }
     public int QuantityIssued { get; set; }
+    public int RemainingQuantity { get; set; }
+    public bool IsFullyIssued { get; set; }
     public string? Notes { get; set; }
 }

@@ -1,167 +1,101 @@
 using InventoryAPI.Application.Interfaces;
 using InventoryAPI.Domain.Entities;
 using InventoryAPI.Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 
 namespace InventoryAPI.Infrastructure.Data;
 
 /// <summary>
-/// Seeds initial data for development and testing
+/// Seeds deterministic demonstration data. Seed balances are posted through
+/// the same immutable ledger contract used by the application.
 /// </summary>
 public static class DatabaseSeeder
 {
     public static async Task SeedAsync(ApplicationDbContext context, IPasswordService passwordService)
     {
-        // Schema is created by migrations before seeding runs
-
-        // Seed Users
-        if (!context.Users.Any())
+        if (!await context.Users.AnyAsync())
         {
             var users = new[]
             {
-                new User
-                {
-                    Email = "admin@inventory.com",
-                    PasswordHash = passwordService.HashPassword("Admin123!"),
-                    FirstName = "Admin",
-                    LastName = "User",
-                    Role = UserRole.Admin,
-                    IsActive = true
-                },
-                new User
-                {
-                    Email = "manager@inventory.com",
-                    PasswordHash = passwordService.HashPassword("Manager123!"),
-                    FirstName = "Manager",
-                    LastName = "User",
-                    Role = UserRole.Manager,
-                    IsActive = true
-                },
-                new User
-                {
-                    Email = "operator@inventory.com",
-                    PasswordHash = passwordService.HashPassword("Operator123!"),
-                    FirstName = "Operator",
-                    LastName = "User",
-                    Role = UserRole.Operator,
-                    IsActive = true
-                }
+                CreateUser("admin@stockverity.local", "Admin", "User", UserRole.Admin, "Admin123!", passwordService),
+                CreateUser("manager@stockverity.local", "Manager", "User", UserRole.Manager, "Manager123!", passwordService),
+                CreateUser("operator@stockverity.local", "Operator", "User", UserRole.Operator, "Operator123!", passwordService)
             };
 
             await context.Users.AddRangeAsync(users);
             await context.SaveChangesAsync();
         }
 
-        // Seed Products
-        if (!context.Products.Any())
+        var seedActor = await context.Users
+            .OrderBy(user => user.Role)
+            .FirstAsync(user => user.Role == UserRole.Admin);
+
+        if (!await context.Products.AnyAsync())
         {
-            var products = new[]
+            var seeds = new[]
             {
-                new Product
-                {
-                    SKU = "WIDGET-001",
-                    Name = "Standard Widget",
-                    Description = "A standard widget for general use",
-                    Category = "Widgets",
-                    CurrentStock = 150,
-                    ReorderPoint = 50,
-                    ReorderQuantity = 100,
-                    UnitOfMeasure = "EA",
-                    UnitCost = 12.50m,
-                    Location = "A-01-01",
-                    CostingMethod = CostingMethod.FIFO
-                },
-                new Product
-                {
-                    SKU = "BOLT-M6-50",
-                    Name = "M6x50mm Bolt",
-                    Description = "M6 bolt, 50mm length, grade 8.8",
-                    Category = "Fasteners",
-                    CurrentStock = 5000,
-                    ReorderPoint = 1000,
-                    ReorderQuantity = 5000,
-                    UnitOfMeasure = "EA",
-                    UnitCost = 0.15m,
-                    Location = "B-02-05",
-                    CostingMethod = CostingMethod.Average
-                },
-                new Product
-                {
-                    SKU = "GEAR-42T",
-                    Name = "42 Tooth Gear",
-                    Description = "Steel gear, 42 teeth, 10mm bore",
-                    Category = "Mechanical",
-                    CurrentStock = 75,
-                    ReorderPoint = 20,
-                    ReorderQuantity = 50,
-                    UnitOfMeasure = "EA",
-                    UnitCost = 24.99m,
-                    Location = "C-03-12",
-                    CostingMethod = CostingMethod.FIFO
-                },
-                new Product
-                {
-                    SKU = "CABLE-ETH-5M",
-                    Name = "Ethernet Cable 5m",
-                    Description = "Cat6 Ethernet cable, 5 meter length",
-                    Category = "Cables",
-                    CurrentStock = 200,
-                    ReorderPoint = 50,
-                    ReorderQuantity = 100,
-                    UnitOfMeasure = "EA",
-                    UnitCost = 8.75m,
-                    Location = "D-01-08",
-                    CostingMethod = CostingMethod.Average
-                },
-                new Product
-                {
-                    SKU = "SEAL-ORNG-100",
-                    Name = "O-Ring 100mm",
-                    Description = "Nitrile O-ring, 100mm diameter",
-                    Category = "Seals",
-                    CurrentStock = 25,
-                    ReorderPoint = 50,
-                    ReorderQuantity = 100,
-                    UnitOfMeasure = "EA",
-                    UnitCost = 3.50m,
-                    Location = "E-04-03",
-                    CostingMethod = CostingMethod.FIFO
-                }
+                new ProductSeed("WIDGET-001", "Standard Widget", "A standard widget for general use", "Widgets", 150, 50, 100, "EA", 12.50m, "A-01-01"),
+                new ProductSeed("BOLT-M6-50", "M6x50mm Bolt", "M6 bolt, 50mm length, grade 8.8", "Fasteners", 5000, 1000, 5000, "EA", 0.15m, "B-02-05"),
+                new ProductSeed("GEAR-42T", "42 Tooth Gear", "Steel gear, 42 teeth, 10mm bore", "Mechanical", 75, 20, 50, "EA", 24.99m, "C-03-12"),
+                new ProductSeed("CABLE-ETH-5M", "Ethernet Cable 5m", "Cat6 Ethernet cable, 5 meter length", "Cables", 200, 50, 100, "EA", 8.75m, "D-01-08"),
+                new ProductSeed("SEAL-ORNG-100", "O-Ring 100mm", "Nitrile O-ring, 100mm diameter", "Seals", 25, 50, 100, "EA", 3.50m, "E-04-03")
             };
 
-            await context.Products.AddRangeAsync(products);
+            foreach (var seed in seeds)
+            {
+                var product = new Product
+                {
+                    SKU = seed.Sku,
+                    Name = seed.Name,
+                    Description = seed.Description,
+                    Category = seed.Category,
+                    ReorderPoint = seed.ReorderPoint,
+                    ReorderQuantity = seed.ReorderQuantity,
+                    UnitOfMeasure = seed.UnitOfMeasure,
+                    UnitCost = seed.UnitCost,
+                    Location = seed.Location
+                };
+
+                await context.Products.AddAsync(product);
+                await context.StockMovements.AddAsync(StockMovement.Post(
+                    product,
+                    product.Id,
+                    StockMovementType.OpeningBalance,
+                    seed.OpeningStock,
+                    "Demonstration seed opening balance",
+                    $"SEED-{seed.Sku}",
+                    seedActor.Id));
+            }
+
             await context.SaveChangesAsync();
         }
 
-        // Seed Work Orders
-        if (!context.WorkOrders.Any())
+        if (!await context.WorkOrders.AnyAsync())
         {
-            var operator1 = context.Users.First(u => u.Role == UserRole.Operator);
-            var manager = context.Users.First(u => u.Role == UserRole.Manager);
-            var product1 = context.Products.First(p => p.SKU == "WIDGET-001");
-            var product2 = context.Products.First(p => p.SKU == "BOLT-M6-50");
+            var operatorUser = await context.Users.FirstAsync(user => user.Role == UserRole.Operator);
+            var product1 = await context.Products.FirstAsync(product => product.SKU == "WIDGET-001");
+            var product2 = await context.Products.FirstAsync(product => product.SKU == "BOLT-M6-50");
 
             var workOrder = new WorkOrder
             {
-                OrderNumber = "WO-2024-001",
+                OrderNumber = "WO-DEMO-001",
                 Title = "Assembly Line Maintenance",
-                Description = "Routine maintenance for assembly line A",
+                Description = "Routine maintenance demonstration work order",
                 Priority = WorkOrderPriority.High,
                 Status = WorkOrderStatus.Draft,
                 DueDate = DateTime.UtcNow.AddDays(7),
-                RequestedById = operator1.Id,
+                RequestedById = operatorUser.Id,
                 Items = new List<WorkOrderItem>
                 {
-                    new WorkOrderItem
+                    new()
                     {
                         ProductId = product1.Id,
-                        QuantityRequested = 10,
-                        QuantityIssued = 0
+                        QuantityRequested = 10
                     },
-                    new WorkOrderItem
+                    new()
                     {
                         ProductId = product2.Id,
-                        QuantityRequested = 50,
-                        QuantityIssued = 0
+                        QuantityRequested = 50
                     }
                 }
             };
@@ -170,4 +104,35 @@ public static class DatabaseSeeder
             await context.SaveChangesAsync();
         }
     }
+
+    private static User CreateUser(
+        string email,
+        string firstName,
+        string lastName,
+        UserRole role,
+        string password,
+        IPasswordService passwordService)
+    {
+        return new User
+        {
+            Email = email,
+            PasswordHash = passwordService.HashPassword(password),
+            FirstName = firstName,
+            LastName = lastName,
+            Role = role,
+            IsActive = true
+        };
+    }
+
+    private sealed record ProductSeed(
+        string Sku,
+        string Name,
+        string Description,
+        string Category,
+        int OpeningStock,
+        int ReorderPoint,
+        int ReorderQuantity,
+        string UnitOfMeasure,
+        decimal UnitCost,
+        string Location);
 }

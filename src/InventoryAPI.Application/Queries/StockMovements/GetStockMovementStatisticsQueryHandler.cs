@@ -7,7 +7,8 @@ using Microsoft.EntityFrameworkCore;
 namespace InventoryAPI.Application.Queries.StockMovements;
 
 /// <summary>
-/// Computes stock movement statistics with database-side aggregation
+/// Computes signed ledger statistics over an optional UTC date range.
+/// Historical transfer rows are counted separately and contribute no quantity.
 /// </summary>
 public class GetStockMovementStatisticsQueryHandler
     : IRequestHandler<GetStockMovementStatisticsQuery, StockMovementStatisticsDto>
@@ -23,38 +24,57 @@ public class GetStockMovementStatisticsQueryHandler
         GetStockMovementStatisticsQuery request,
         CancellationToken cancellationToken)
     {
-        var query = _context.StockMovements.AsNoTracking().AsQueryable();
+        var query = _context.StockMovements
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .AsQueryable();
 
         if (request.FromDate.HasValue)
         {
-            query = query.Where(m => m.Timestamp >= request.FromDate.Value);
+            query = query.Where(movement => movement.Timestamp >= request.FromDate.Value);
         }
 
         if (request.ToDate.HasValue)
         {
-            query = query.Where(m => m.Timestamp <= request.ToDate.Value);
+            query = query.Where(movement => movement.Timestamp <= request.ToDate.Value);
         }
 
         var byType = await query
-            .GroupBy(m => m.Type)
-            .Select(g => new
+            .GroupBy(movement => movement.Type)
+            .Select(group => new
             {
-                Type = g.Key,
-                Count = g.Count(),
-                Quantity = g.Sum(m => m.Quantity)
+                Type = group.Key,
+                Count = group.Count(),
+                Quantity = group.Sum(movement => (long)movement.Quantity)
             })
             .ToListAsync(cancellationToken);
 
+        var positiveAdjustments = await query
+            .Where(movement => movement.Type == StockMovementType.Adjustment && movement.Quantity > 0)
+            .SumAsync(movement => (long?)movement.Quantity, cancellationToken) ?? 0;
+        var negativeAdjustments = await query
+            .Where(movement => movement.Type == StockMovementType.Adjustment && movement.Quantity < 0)
+            .SumAsync(movement => (long?)(-(long)movement.Quantity), cancellationToken) ?? 0;
+
+        var quantityIn =
+            QuantityOf(StockMovementType.OpeningBalance) +
+            QuantityOf(StockMovementType.Receipt) +
+            QuantityOf(StockMovementType.Return) +
+            positiveAdjustments;
+        var quantityOut = QuantityOf(StockMovementType.Issue) + negativeAdjustments;
+
         var result = new StockMovementStatisticsDto
         {
-            TotalMovements = byType.Sum(g => g.Count),
+            TotalMovements = byType.Sum(group => group.Count),
+            OpeningBalanceCount = CountOf(StockMovementType.OpeningBalance),
             ReceiptCount = CountOf(StockMovementType.Receipt),
             IssueCount = CountOf(StockMovementType.Issue),
             AdjustmentCount = CountOf(StockMovementType.Adjustment),
-            TransferCount = CountOf(StockMovementType.Transfer),
+            LegacyTransferCount = CountOf(StockMovementType.Transfer),
             ReturnCount = CountOf(StockMovementType.Return),
-            TotalQuantityIn = QuantityOf(StockMovementType.Receipt) + QuantityOf(StockMovementType.Return),
-            TotalQuantityOut = QuantityOf(StockMovementType.Issue),
+            TotalQuantityIn = quantityIn,
+            TotalQuantityOut = quantityOut,
+            NetQuantityChange = quantityIn - quantityOut,
             FromDate = request.FromDate,
             ToDate = request.ToDate
         };
@@ -62,17 +82,20 @@ public class GetStockMovementStatisticsQueryHandler
         if (result.TotalMovements > 0)
         {
             result.UniqueProducts = await query
-                .Select(m => m.ProductId)
+                .Select(movement => movement.ProductId)
                 .Distinct()
                 .CountAsync(cancellationToken);
 
-            result.FromDate ??= await query.MinAsync(m => m.Timestamp, cancellationToken);
-            result.ToDate ??= await query.MaxAsync(m => m.Timestamp, cancellationToken);
+            result.FromDate ??= await query.MinAsync(movement => movement.Timestamp, cancellationToken);
+            result.ToDate ??= await query.MaxAsync(movement => movement.Timestamp, cancellationToken);
         }
 
         return result;
 
-        int CountOf(StockMovementType type) => byType.FirstOrDefault(g => g.Type == type)?.Count ?? 0;
-        int QuantityOf(StockMovementType type) => byType.FirstOrDefault(g => g.Type == type)?.Quantity ?? 0;
+        int CountOf(StockMovementType type) =>
+            byType.FirstOrDefault(group => group.Type == type)?.Count ?? 0;
+
+        long QuantityOf(StockMovementType type) =>
+            byType.FirstOrDefault(group => group.Type == type)?.Quantity ?? 0;
     }
 }

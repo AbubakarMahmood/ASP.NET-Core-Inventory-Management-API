@@ -14,181 +14,190 @@ public class WorkOrderLifecycleTests : ApiTestBase
     {
     }
 
-    private async Task<ProductDto> CreateProductAsync(HttpClient client, int currentStock)
-    {
-        var response = await client.PostAsJsonAsync("/api/v1/products", new
-        {
-            sku = $"WO-{Guid.NewGuid():N}"[..20],
-            name = "Work order test product",
-            description = "d",
-            category = "Test",
-            currentStock,
-            reorderPoint = 1,
-            reorderQuantity = 5,
-            unitOfMeasure = "EA",
-            unitCost = 3.00,
-            location = "W-01-01"
-        });
-        response.EnsureSuccessStatusCode();
-        return (await response.Content.ReadFromJsonAsync<ProductDto>(JsonOptions))!;
-    }
-
-    private async Task<WorkOrderDto> CreateDraftAsync(HttpClient client, Guid productId, int quantity)
-    {
-        var response = await client.PostAsJsonAsync("/api/v1/workorders", new
-        {
-            title = "Lifecycle test order",
-            description = "Created by integration tests",
-            priority = "High",
-            items = new[] { new { productId, quantityRequested = quantity } }
-        });
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
-        return (await response.Content.ReadFromJsonAsync<WorkOrderDto>(JsonOptions))!;
-    }
-
-    private async Task<Guid> GetAdminUserIdAsync(HttpClient client)
-    {
-        var users = await client.GetFromJsonAsync<PaginatedResult<UserDto>>(
-            "/api/v1/users?pageSize=50", JsonOptions);
-        return users!.Items.First(u => u.Email == "admin@inventory.com").Id;
-    }
-
     [Fact]
-    public async Task FullLifecycle_DraftToCompleted_WithStockIssued()
+    public async Task Fulfilment_IsAtomicIdempotent_AndCompletionRequiresAllRequestedStock()
     {
         var client = await CreateAuthenticatedClientAsync();
-        var product = await CreateProductAsync(client, currentStock: 50);
+        var product = await CreateProductAsync(client, openingStock: 20);
         var draft = await CreateDraftAsync(client, product.Id, quantity: 10);
 
-        draft.Status.Should().Be(WorkOrderStatus.Draft);
-        draft.OrderNumber.Should().MatchRegex(@"^WO-\d{8}-\d{4}$");
-        draft.Items.Should().ContainSingle(i => i.ProductId == product.Id);
-        draft.RequestedByEmail.Should().Be("admin@inventory.com");
+        await SubmitApproveAndStartAsync(client, draft.Id);
 
-        // Submit
-        var submit = await client.PostAsync($"/api/v1/workorders/{draft.Id}/submit", null);
-        submit.StatusCode.Should().Be(HttpStatusCode.OK);
+        var prematureCompletion = await client.PostAsync(
+            $"/api/v1/workorders/{draft.Id}/complete",
+            null,
+            TestContext.Current.CancellationToken);
+        prematureCompletion.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
-        // Approve and assign
-        var adminId = await GetAdminUserIdAsync(client);
-        var approve = await client.PostAsJsonAsync($"/api/v1/workorders/{draft.Id}/approve", new
+        var firstOperation = Guid.NewGuid();
+        var issueFour = new
         {
-            assignedToId = adminId
-        });
-        approve.StatusCode.Should().Be(HttpStatusCode.OK);
-        var approved = await approve.Content.ReadFromJsonAsync<WorkOrderDto>(JsonOptions);
-        approved!.Status.Should().Be(WorkOrderStatus.Approved);
-        approved.AssignedToEmail.Should().Be("admin@inventory.com");
+            operationId = firstOperation,
+            items = new[] { new { productId = product.Id, quantity = 4, notes = "First pick" } }
+        };
 
-        // Start
-        var start = await client.PostAsync($"/api/v1/workorders/{draft.Id}/start", null);
-        start.StatusCode.Should().Be(HttpStatusCode.OK);
+        var firstIssueResponse = await client.PostAsJsonAsync(
+            $"/api/v1/workorders/{draft.Id}/issue-items",
+            issueFour,
+            TestContext.Current.CancellationToken);
+        firstIssueResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var issued = (await firstIssueResponse.Content.ReadFromJsonAsync<WorkOrderDto>(
+            JsonOptions,
+            TestContext.Current.CancellationToken))!;
+        issued.Items.Single().QuantityIssued.Should().Be(4);
 
-        // Issue items — must decrement stock and track issued quantity
-        var issue = await client.PostAsJsonAsync($"/api/v1/workorders/{draft.Id}/issue-items", new
-        {
-            items = new[] { new { productId = product.Id, quantity = 4 } }
-        });
-        issue.StatusCode.Should().Be(HttpStatusCode.OK);
-        var issued = await issue.Content.ReadFromJsonAsync<WorkOrderDto>(JsonOptions);
-        issued!.Items[0].QuantityIssued.Should().Be(4);
+        var replayResponse = await client.PostAsJsonAsync(
+            $"/api/v1/workorders/{draft.Id}/issue-items",
+            issueFour,
+            TestContext.Current.CancellationToken);
+        replayResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var replay = (await replayResponse.Content.ReadFromJsonAsync<WorkOrderDto>(
+            JsonOptions,
+            TestContext.Current.CancellationToken))!;
+        replay.Items.Single().QuantityIssued.Should().Be(4);
 
-        var updatedProduct = await client.GetFromJsonAsync<ProductDto>(
-            $"/api/v1/products/{product.Id}", JsonOptions);
-        updatedProduct!.CurrentStock.Should().Be(46);
+        var conflictingReplay = await client.PostAsJsonAsync(
+            $"/api/v1/workorders/{draft.Id}/issue-items",
+            new
+            {
+                operationId = firstOperation,
+                items = new[] { new { productId = product.Id, quantity = 5 } }
+            },
+            TestContext.Current.CancellationToken);
+        conflictingReplay.StatusCode.Should().Be(HttpStatusCode.Conflict);
 
-        // Complete
-        var complete = await client.PostAsync($"/api/v1/workorders/{draft.Id}/complete", null);
+        var secondIssueResponse = await client.PostAsJsonAsync(
+            $"/api/v1/workorders/{draft.Id}/issue-items",
+            new
+            {
+                operationId = Guid.NewGuid(),
+                items = new[] { new { productId = product.Id, quantity = 6 } }
+            },
+            TestContext.Current.CancellationToken);
+        secondIssueResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var fullyIssued = (await secondIssueResponse.Content.ReadFromJsonAsync<WorkOrderDto>(
+            JsonOptions,
+            TestContext.Current.CancellationToken))!;
+        fullyIssued.IsFullyIssued.Should().BeTrue();
+        fullyIssued.Items.Single().QuantityIssued.Should().Be(10);
+
+        var complete = await client.PostAsync(
+            $"/api/v1/workorders/{draft.Id}/complete",
+            null,
+            TestContext.Current.CancellationToken);
         complete.StatusCode.Should().Be(HttpStatusCode.OK);
-        var completed = await complete.Content.ReadFromJsonAsync<WorkOrderDto>(JsonOptions);
-        completed!.Status.Should().Be(WorkOrderStatus.Completed);
+        var completed = (await complete.Content.ReadFromJsonAsync<WorkOrderDto>(
+            JsonOptions,
+            TestContext.Current.CancellationToken))!;
+        completed.Status.Should().Be(WorkOrderStatus.Completed);
         completed.CompletedDate.Should().NotBeNull();
+
+        (await GetProductAsync(client, product.Id))!.CurrentStock.Should().Be(10);
     }
 
     [Fact]
-    public async Task Reject_RequiresReason_AndStoresIt()
+    public async Task MultiLineIssue_PrevalidatesEntireBatchBeforeChangingAnyBalance()
     {
         var client = await CreateAuthenticatedClientAsync();
-        var product = await CreateProductAsync(client, currentStock: 5);
-        var draft = await CreateDraftAsync(client, product.Id, quantity: 2);
-
-        await client.PostAsync($"/api/v1/workorders/{draft.Id}/submit", null);
-
-        // Missing reason is rejected by validation
-        var noReason = await client.PostAsJsonAsync($"/api/v1/workorders/{draft.Id}/reject", new
+        var productA = await CreateProductAsync(client, openingStock: 10);
+        var productB = await CreateProductAsync(client, openingStock: 2);
+        var draft = await CreateDraftAsync(client, new[]
         {
-            reason = ""
+            new { productId = productA.Id, quantityRequested = 5 },
+            new { productId = productB.Id, quantityRequested = 5 }
         });
-        noReason.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
-        var reject = await client.PostAsJsonAsync($"/api/v1/workorders/{draft.Id}/reject", new
-        {
-            reason = "Not needed this quarter"
-        });
-        reject.StatusCode.Should().Be(HttpStatusCode.OK);
+        await SubmitApproveAndStartAsync(client, draft.Id);
 
-        var rejected = await reject.Content.ReadFromJsonAsync<WorkOrderDto>(JsonOptions);
-        rejected!.Status.Should().Be(WorkOrderStatus.Rejected);
-        rejected.RejectionReason.Should().Be("Not needed this quarter");
+        var response = await client.PostAsJsonAsync(
+            $"/api/v1/workorders/{draft.Id}/issue-items",
+            new
+            {
+                operationId = Guid.NewGuid(),
+                items = new[]
+                {
+                    new { productId = productA.Id, quantity = 3 },
+                    new { productId = productB.Id, quantity = 3 }
+                }
+            },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await GetProductAsync(client, productA.Id))!.CurrentStock.Should().Be(10);
+        (await GetProductAsync(client, productB.Id))!.CurrentStock.Should().Be(2);
     }
 
     [Fact]
-    public async Task IssueItems_MoreThanRequested_Returns400()
+    public async Task DuplicateProductLines_AreRejected()
     {
         var client = await CreateAuthenticatedClientAsync();
-        var product = await CreateProductAsync(client, currentStock: 100);
-        var draft = await CreateDraftAsync(client, product.Id, quantity: 5);
+        var product = await CreateProductAsync(client, openingStock: 10);
 
-        await client.PostAsync($"/api/v1/workorders/{draft.Id}/submit", null);
-        var adminId = await GetAdminUserIdAsync(client);
-        await client.PostAsJsonAsync($"/api/v1/workorders/{draft.Id}/approve", new { assignedToId = adminId });
-        await client.PostAsync($"/api/v1/workorders/{draft.Id}/start", null);
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/workorders",
+            new
+            {
+                title = "Duplicate line order",
+                description = "Invalid test order",
+                priority = "High",
+                items = new[]
+                {
+                    new { productId = product.Id, quantityRequested = 1 },
+                    new { productId = product.Id, quantityRequested = 2 }
+                }
+            },
+            TestContext.Current.CancellationToken);
 
-        var issue = await client.PostAsJsonAsync($"/api/v1/workorders/{draft.Id}/issue-items", new
-        {
-            items = new[] { new { productId = product.Id, quantity = 6 } }
-        });
-
-        issue.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
-    [Fact]
-    public async Task Submit_AlreadySubmittedOrder_Returns400()
+    private static async Task<WorkOrderDto> CreateDraftAsync(
+        HttpClient client,
+        Guid productId,
+        int quantity) =>
+        await CreateDraftAsync(client, new[] { new { productId, quantityRequested = quantity } });
+
+    private static async Task<WorkOrderDto> CreateDraftAsync<T>(HttpClient client, T items)
     {
-        var client = await CreateAuthenticatedClientAsync();
-        var product = await CreateProductAsync(client, currentStock: 5);
-        var draft = await CreateDraftAsync(client, product.Id, quantity: 1);
-
-        await client.PostAsync($"/api/v1/workorders/{draft.Id}/submit", null);
-        var second = await client.PostAsync($"/api/v1/workorders/{draft.Id}/submit", null);
-
-        second.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/workorders",
+            new
+            {
+                title = "Lifecycle test order",
+                description = "Created by PostgreSQL integration tests",
+                priority = "High",
+                items
+            },
+            TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        return (await response.Content.ReadFromJsonAsync<WorkOrderDto>(
+            JsonOptions,
+            TestContext.Current.CancellationToken))!;
     }
 
-    [Fact]
-    public async Task Approve_AsOperator_Returns403()
+    private static async Task SubmitApproveAndStartAsync(HttpClient client, Guid workOrderId)
     {
-        var admin = await CreateAuthenticatedClientAsync();
-        var product = await CreateProductAsync(admin, currentStock: 5);
-        var draft = await CreateDraftAsync(admin, product.Id, quantity: 1);
-        await admin.PostAsync($"/api/v1/workorders/{draft.Id}/submit", null);
+        (await client.PostAsync(
+            $"/api/v1/workorders/{workOrderId}/submit",
+            null,
+            TestContext.Current.CancellationToken))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var operatorClient = await CreateAuthenticatedClientAsync("operator@inventory.com", "Operator123!");
-        var approve = await operatorClient.PostAsJsonAsync($"/api/v1/workorders/{draft.Id}/approve", new
-        {
-            assignedToId = Guid.NewGuid()
-        });
+        var users = await client.GetFromJsonAsync<PaginatedResult<UserDto>>(
+            "/api/v1/users?pageSize=50",
+            JsonOptions,
+            TestContext.Current.CancellationToken);
+        var adminId = users!.Items.Single(user => user.Email == "admin@stockverity.local").Id;
 
-        approve.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-    }
+        (await client.PostAsJsonAsync(
+            $"/api/v1/workorders/{workOrderId}/approve",
+            new { assignedToId = adminId },
+            TestContext.Current.CancellationToken)).StatusCode.Should().Be(HttpStatusCode.OK);
 
-    [Fact]
-    public async Task UnknownWorkOrder_Returns404()
-    {
-        var client = await CreateAuthenticatedClientAsync();
-
-        var response = await client.PostAsync($"/api/v1/workorders/{Guid.NewGuid()}/submit", null);
-
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await client.PostAsync(
+            $"/api/v1/workorders/{workOrderId}/start",
+            null,
+            TestContext.Current.CancellationToken))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
     }
 }

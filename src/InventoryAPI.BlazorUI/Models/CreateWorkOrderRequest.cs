@@ -28,6 +28,7 @@ public class RejectWorkOrderRequest
 
 public class IssueWorkOrderItemsRequest
 {
+    public Guid OperationId { get; set; } = Guid.NewGuid();
     public List<IssueItemRequest> Items { get; set; } = new();
 }
 
@@ -35,6 +36,5 @@ public class IssueItemRequest
 {
     public Guid ProductId { get; set; }
     public int Quantity { get; set; }
-    public string? FromLocation { get; set; }
     public string? Notes { get; set; }
 }

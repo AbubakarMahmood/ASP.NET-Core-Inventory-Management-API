@@ -273,6 +273,7 @@ public class WorkOrdersController : ControllerBase
 
         var command = new IssueWorkOrderItemsCommand
         {
+            OperationId = request.OperationId,
             WorkOrderId = id,
             Items = request.Items
         };
@@ -305,7 +306,7 @@ public class WorkOrdersController : ControllerBase
         var query = new GetWorkOrdersQuery
         {
             PageNumber = 1,
-            PageSize = int.MaxValue,
+            PageSize = 10_000,
             Status = status,
             Priority = priority,
             AssignedToId = assignedToId,
@@ -346,7 +347,7 @@ public class WorkOrdersController : ControllerBase
         var query = new GetWorkOrdersQuery
         {
             PageNumber = 1,
-            PageSize = int.MaxValue,
+            PageSize = 10_000,
             Status = status,
             Priority = priority,
             AssignedToId = assignedToId,
@@ -380,5 +381,6 @@ public class RejectWorkOrderRequest
 
 public class IssueWorkOrderItemsRequest
 {
+    public Guid OperationId { get; set; }
     public List<IssueItemRequest> Items { get; set; } = new();
 }

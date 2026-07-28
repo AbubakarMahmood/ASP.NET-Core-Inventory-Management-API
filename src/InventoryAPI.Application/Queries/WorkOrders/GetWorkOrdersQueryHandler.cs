@@ -82,19 +82,7 @@ public class GetWorkOrdersQueryHandler : IRequestHandler<GetWorkOrdersQuery, Pag
             dto.AssignedToName = workOrder.AssignedTo?.FullName;
             dto.AssignedToEmail = workOrder.AssignedTo?.Email;
 
-            dto.Items = workOrder.Items.Select(item => new WorkOrderItemDto
-            {
-                Id = item.Id,
-                WorkOrderId = item.WorkOrderId,
-                ProductId = item.ProductId,
-                ProductSKU = item.Product?.SKU ?? "",
-                ProductName = item.Product?.Name ?? "",
-                UnitOfMeasure = item.Product?.UnitOfMeasure ?? "",
-                CurrentStock = item.Product?.CurrentStock ?? 0,
-                QuantityRequested = item.QuantityRequested,
-                QuantityIssued = item.QuantityIssued,
-                Notes = item.Notes
-            }).ToList();
+            dto.Items = workOrder.Items.Select(item => item.ToDto()).ToList();
 
             workOrderDtos.Add(dto);
         }

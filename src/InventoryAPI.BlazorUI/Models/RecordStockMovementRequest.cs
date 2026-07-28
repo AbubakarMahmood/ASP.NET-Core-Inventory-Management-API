@@ -2,12 +2,10 @@ namespace InventoryAPI.BlazorUI.Models;
 
 public class RecordStockMovementRequest
 {
+    public Guid OperationId { get; set; } = Guid.NewGuid();
     public Guid ProductId { get; set; }
-    public StockMovementType Type { get; set; }
+    public StockMovementType Type { get; set; } = StockMovementType.Receipt;
     public int Quantity { get; set; }
-    public string? FromLocation { get; set; }
-    public string? ToLocation { get; set; }
-    public string? Reason { get; set; }
-    public string? ReferenceNumber { get; set; }
-    public Guid? WorkOrderId { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string? Reference { get; set; }
 }

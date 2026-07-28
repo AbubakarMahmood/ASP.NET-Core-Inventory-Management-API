@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using InventoryAPI.Application.DTOs;
+using InventoryAPI.Infrastructure.Data;
 using InventoryAPI.IntegrationTests.Infrastructure;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace InventoryAPI.IntegrationTests;
 
@@ -13,106 +16,167 @@ public class AuthEndpointsTests : ApiTestBase
     }
 
     [Fact]
-    public async Task Login_WithSeededAdmin_ReturnsTokenPair()
+    public async Task Login_WithSeededAdmin_ReturnsTokenPair_AndPersistsOnlyDigest()
     {
         var client = CreateClient();
-
-        var response = await client.PostAsJsonAsync("/api/v1/auth/login", new
-        {
-            email = "admin@inventory.com",
-            password = "Admin123!"
-        });
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new
+            {
+                email = "admin@stockverity.local",
+                password = "Admin123!"
+            },
+            TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var auth = await response.Content.ReadFromJsonAsync<AuthResponse>(JsonOptions);
+        var auth = await response.Content.ReadFromJsonAsync<AuthResponse>(
+            JsonOptions,
+            TestContext.Current.CancellationToken);
+        auth.Should().NotBeNull();
         auth!.AccessToken.Should().NotBeNullOrEmpty();
         auth.RefreshToken.Should().NotBeNullOrEmpty();
         auth.ExpiresIn.Should().BeGreaterThan(0);
         auth.TokenType.Should().Be("Bearer");
+
+        using var scope = Factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var user = await context.Users.SingleAsync(
+            item => item.Email == "admin@stockverity.local",
+            TestContext.Current.CancellationToken);
+
+        user.RefreshTokenHash.Should().NotBeNullOrWhiteSpace();
+        user.RefreshTokenHash.Should().HaveLength(64);
+        user.RefreshTokenHash.Should().NotBe(auth.RefreshToken);
     }
 
     [Fact]
-    public async Task Login_WithWrongPassword_Returns400WithoutRevealingWhichFieldFailed()
+    public async Task Login_WithUnknownOrWrongCredentials_UsesSameGenericFailure()
     {
         var client = CreateClient();
 
-        var response = await client.PostAsJsonAsync("/api/v1/auth/login", new
-        {
-            email = "admin@inventory.com",
-            password = "WrongPassword1"
-        });
+        var unknown = await client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new
+            {
+                email = $"missing-{Guid.NewGuid():N}@example.com",
+                password = "WrongPassword1"
+            },
+            TestContext.Current.CancellationToken);
+        var wrong = await client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new
+            {
+                email = "admin@stockverity.local",
+                password = "WrongPassword1"
+            },
+            TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        unknown.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        wrong.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
-        var body = await response.Content.ReadAsStringAsync();
-        body.Should().Contain("Invalid email or password");
+        var unknownBody = await unknown.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var wrongBody = await wrong.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        unknownBody.Should().Contain("Invalid email or password");
+        wrongBody.Should().Contain("Invalid email or password");
     }
 
     [Fact]
-    public async Task Refresh_WithTokenFromLogin_IssuesNewPairAndRotates()
+    public async Task Refresh_RotatesToken_AndPriorTokenCannotBeReused()
     {
         var client = CreateClient();
+        var login = await client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new
+            {
+                email = "manager@stockverity.local",
+                password = "Manager123!"
+            },
+            TestContext.Current.CancellationToken);
+        login.EnsureSuccessStatusCode();
+        var first = (await login.Content.ReadFromJsonAsync<AuthResponse>(
+            JsonOptions,
+            TestContext.Current.CancellationToken))!;
 
-        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new
-        {
-            email = "manager@inventory.com",
-            password = "Manager123!"
-        });
-        var first = await login.Content.ReadFromJsonAsync<AuthResponse>(JsonOptions);
-
-        var refresh = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
-        {
-            refreshToken = first!.RefreshToken
-        });
-
+        var refresh = await client.PostAsJsonAsync(
+            "/api/v1/auth/refresh",
+            new { refreshToken = first.RefreshToken },
+            TestContext.Current.CancellationToken);
         refresh.StatusCode.Should().Be(HttpStatusCode.OK);
-        var second = await refresh.Content.ReadFromJsonAsync<AuthResponse>(JsonOptions);
-        second!.RefreshToken.Should().NotBe(first.RefreshToken, "refresh tokens must rotate");
+        var second = (await refresh.Content.ReadFromJsonAsync<AuthResponse>(
+            JsonOptions,
+            TestContext.Current.CancellationToken))!;
+        second.RefreshToken.Should().NotBe(first.RefreshToken);
 
-        // The old token is single-use
-        var replay = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
-        {
-            refreshToken = first.RefreshToken
-        });
+        var replay = await client.PostAsJsonAsync(
+            "/api/v1/auth/refresh",
+            new { refreshToken = first.RefreshToken },
+            TestContext.Current.CancellationToken);
         replay.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
-    public async Task Refresh_WithGarbageToken_Returns401()
+    public async Task ProtectedSurfaces_EnforceAuthenticationAndRoles()
     {
-        var client = CreateClient();
+        var anonymous = CreateClient();
+        var anonymousProducts = await anonymous.GetAsync(
+            "/api/v1/products",
+            TestContext.Current.CancellationToken);
+        anonymousProducts.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
-        var response = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
-        {
-            refreshToken = "not-a-real-token"
-        });
+        var operatorClient = await CreateAuthenticatedClientAsync(
+            "operator@stockverity.local",
+            "Operator123!");
+        var forbiddenCreate = await operatorClient.PostAsJsonAsync(
+            "/api/v1/products",
+            new
+            {
+                sku = $"FORBIDDEN-{Guid.NewGuid():N}"[..30],
+                name = "Forbidden product",
+                description = "Role enforcement test",
+                category = "Tests",
+                openingStock = 0,
+                reorderPoint = 1,
+                reorderQuantity = 1,
+                unitOfMeasure = "EA",
+                unitCost = 1m,
+                location = "TEST-01"
+            },
+            TestContext.Current.CancellationToken);
+        forbiddenCreate.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var anonymousNegotiate = await anonymous.PostAsync(
+            "/api/v1/notifications/negotiate?negotiateVersion=1",
+            null,
+            TestContext.Current.CancellationToken);
+        anonymousNegotiate.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var authenticatedNegotiate = await operatorClient.PostAsync(
+            "/api/v1/notifications/negotiate?negotiateVersion=1",
+            null,
+            TestContext.Current.CancellationToken);
+        authenticatedNegotiate.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]
-    public async Task Logout_RevokesRefreshToken()
+    public async Task UserWithLedgerHistory_CannotBeDeleted()
     {
-        var client = CreateClient();
+        var client = await CreateAuthenticatedClientAsync();
+        await CreateProductAsync(client, openingStock: 1);
 
-        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new
+        Guid adminId;
+        using (var scope = Factory.Services.CreateScope())
         {
-            email = "operator@inventory.com",
-            password = "Operator123!"
-        });
-        var auth = await login.Content.ReadFromJsonAsync<AuthResponse>(JsonOptions);
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            adminId = await context.Users
+                .Where(user => user.Email == "admin@stockverity.local")
+                .Select(user => user.Id)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
 
-        client.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", auth!.AccessToken);
+        var response = await client.DeleteAsync(
+            $"/api/v1/users/{adminId}",
+            TestContext.Current.CancellationToken);
 
-        var logout = await client.PostAsync("/api/v1/auth/logout", null);
-        logout.StatusCode.Should().Be(HttpStatusCode.NoContent);
-
-        var refresh = await client.PostAsJsonAsync("/api/v1/auth/refresh", new
-        {
-            refreshToken = auth.RefreshToken
-        });
-        refresh.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 }

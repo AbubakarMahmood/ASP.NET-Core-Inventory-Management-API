@@ -6,64 +6,72 @@ namespace InventoryAPI.UnitTests.Domain;
 
 public class ProductTests
 {
-    private static Product CreateProduct(int currentStock = 10, int reorderPoint = 5) => new()
+    private static Product CreateProduct(int stock = 0, int reorderPoint = 5)
     {
-        SKU = "TEST-001",
-        Name = "Test product",
-        CurrentStock = currentStock,
-        ReorderPoint = reorderPoint
-    };
+        var product = new Product
+        {
+            SKU = "TEST-001",
+            Name = "Test product",
+            Location = "A-01",
+            UnitOfMeasure = "EA",
+            ReorderPoint = reorderPoint
+        };
+        if (stock != 0)
+        {
+            product.ApplyStockDelta(stock);
+        }
+        return product;
+    }
 
     [Fact]
-    public void AdjustStock_PositiveQuantity_IncreasesStock()
+    public void ApplyStockDelta_Positive_IncreasesBalance()
     {
-        var product = CreateProduct(currentStock: 10);
-
-        product.AdjustStock(5);
-
+        var product = CreateProduct(10);
+        product.ApplyStockDelta(5);
         product.CurrentStock.Should().Be(15);
     }
 
     [Fact]
-    public void AdjustStock_NegativeQuantity_DecreasesStock()
+    public void ApplyStockDelta_Negative_DecreasesBalance()
     {
-        var product = CreateProduct(currentStock: 10);
-
-        product.AdjustStock(-4);
-
+        var product = CreateProduct(10);
+        product.ApplyStockDelta(-4);
         product.CurrentStock.Should().Be(6);
     }
 
     [Fact]
-    public void AdjustStock_ToExactlyZero_Succeeds()
+    public void ApplyStockDelta_ToZero_Succeeds()
     {
-        var product = CreateProduct(currentStock: 10);
-
-        product.AdjustStock(-10);
-
+        var product = CreateProduct(10);
+        product.ApplyStockDelta(-10);
         product.CurrentStock.Should().Be(0);
     }
 
     [Fact]
-    public void AdjustStock_BelowZero_ThrowsAndLeavesStockUnchanged()
+    public void ApplyStockDelta_BelowZero_ThrowsWithoutMutation()
     {
-        var product = CreateProduct(currentStock: 3);
-
-        var act = () => product.AdjustStock(-4);
-
+        var product = CreateProduct(3);
+        var act = () => product.ApplyStockDelta(-4);
         act.Should().Throw<InsufficientStockException>()
             .Which.Available.Should().Be(3);
         product.CurrentStock.Should().Be(3);
     }
 
-    [Theory]
-    [InlineData(5, 5, true)]   // at the reorder point
-    [InlineData(4, 5, true)]   // below
-    [InlineData(6, 5, false)]  // above
-    public void IsLowStock_ComparesAgainstReorderPoint(int stock, int reorderPoint, bool expected)
+    [Fact]
+    public void ApplyStockDelta_Overflow_ThrowsWithoutMutation()
     {
-        var product = CreateProduct(stock, reorderPoint);
+        var product = CreateProduct(int.MaxValue);
+        var act = () => product.ApplyStockDelta(1);
+        act.Should().Throw<BusinessRuleViolationException>().WithMessage("*overflow*");
+        product.CurrentStock.Should().Be(int.MaxValue);
+    }
 
-        product.IsLowStock().Should().Be(expected);
+    [Theory]
+    [InlineData(5, 5, true)]
+    [InlineData(4, 5, true)]
+    [InlineData(6, 5, false)]
+    public void IsLowStock_UsesInclusiveReorderPoint(int stock, int reorderPoint, bool expected)
+    {
+        CreateProduct(stock, reorderPoint).IsLowStock().Should().Be(expected);
     }
 }

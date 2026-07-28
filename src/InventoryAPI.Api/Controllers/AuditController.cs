@@ -99,7 +99,7 @@ public class AuditController : ControllerBase
         var query = new GetAuditLogsQuery
         {
             PageNumber = 1,
-            PageSize = int.MaxValue,
+            PageSize = 10_000,
             EntityType = entityType,
             Action = action,
             FromDate = fromDate,
@@ -139,7 +139,7 @@ public class AuditController : ControllerBase
         var query = new GetAuditLogsQuery
         {
             PageNumber = 1,
-            PageSize = int.MaxValue,
+            PageSize = 10_000,
             EntityType = entityType,
             Action = action,
             FromDate = fromDate,

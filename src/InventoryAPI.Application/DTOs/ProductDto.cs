@@ -1,9 +1,8 @@
-using InventoryAPI.Domain.Enums;
-
 namespace InventoryAPI.Application.DTOs;
 
 /// <summary>
-/// Product data transfer object
+/// Product catalog data with the cached on-hand quantity derived from ledger
+/// postings.
 /// </summary>
 public class ProductDto
 {
@@ -18,12 +17,11 @@ public class ProductDto
     public string UnitOfMeasure { get; set; } = string.Empty;
     public decimal UnitCost { get; set; }
     public string Location { get; set; } = string.Empty;
-    public CostingMethod CostingMethod { get; set; }
     public bool IsLowStock { get; set; }
     public DateTime CreatedAt { get; set; }
 
     /// <summary>
-    /// Concurrency token. Send it back on update so conflicting edits are detected.
+    /// PostgreSQL xmin concurrency token. Send it on product metadata updates.
     /// </summary>
     public uint Version { get; set; }
 }

@@ -4,6 +4,7 @@ using InventoryAPI.Application.DTOs;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace InventoryAPI.Api.Controllers;
 
@@ -33,6 +34,7 @@ public class AuthController : ControllerBase
     /// <response code="200">Login successful</response>
     /// <response code="400">Invalid credentials</response>
     [HttpPost("login")]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
@@ -58,6 +60,7 @@ public class AuthController : ControllerBase
     /// <response code="200">Token refreshed</response>
     /// <response code="401">Invalid or expired refresh token</response>
     [HttpPost("refresh")]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<AuthResponse>> Refresh([FromBody] RefreshTokenRequest request)

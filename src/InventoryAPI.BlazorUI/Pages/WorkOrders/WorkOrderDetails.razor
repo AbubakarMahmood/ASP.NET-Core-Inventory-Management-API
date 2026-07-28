@@ -5,7 +5,7 @@
 @inject IDialogService DialogService
 @inject NavigationManager NavigationManager
 
-<PageTitle>Work Order Details - Inventory Management</PageTitle>
+<PageTitle>Work Order Details - StockVerity</PageTitle>
 
 @if (_isLoading)
 {
@@ -124,6 +124,10 @@ else
                     <MudTh>Qty Requested</MudTh>
                     <MudTh>Qty Issued</MudTh>
                     <MudTh>Remaining</MudTh>
+                    @if (_workOrder.Status == WorkOrderStatus.InProgress)
+                    {
+                        <MudTh>Issue now</MudTh>
+                    }
                     <MudTh>Notes</MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -144,12 +148,25 @@ else
                     </MudTd>
                     <MudTd DataLabel="Remaining">
                         @{
-                            var remaining = context.QuantityRequested - context.QuantityIssued;
+                            var remaining = context.RemainingQuantity;
                         }
                         <MudText Color="@(remaining > 0 ? Color.Warning : Color.Success)">
                             @remaining @context.UnitOfMeasure
                         </MudText>
                     </MudTd>
+                    @if (_workOrder.Status == WorkOrderStatus.InProgress)
+                    {
+                        <MudTd DataLabel="Issue now">
+                            <MudNumericField T="int"
+                                             @bind-Value="_issueQuantities[context.ProductId]"
+                                             Min="0"
+                                             Max="@Math.Min(context.RemainingQuantity, context.CurrentStock)"
+                                             Immediate="true"
+                                             Variant="Variant.Outlined"
+                                             Margin="Margin.Dense"
+                                             Disabled="@(_isProcessing || context.RemainingQuantity == 0)" />
+                        </MudTd>
+                    }
                     <MudTd DataLabel="Notes">
                         @(context.Notes ?? "-")
                     </MudTd>
@@ -187,7 +204,14 @@ else
 
                 @if (_workOrder.Status == WorkOrderStatus.InProgress)
                 {
-                    <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.DoneAll" OnClick="CompleteWorkOrderAsync" Disabled="@_isProcessing">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Inventory"
+                               OnClick="IssueSelectedItemsAsync"
+                               Disabled="@(_isProcessing || !_issueQuantities.Values.Any(quantity => quantity > 0))">
+                        Issue selected quantities
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.DoneAll" OnClick="CompleteWorkOrderAsync" Disabled="@(_isProcessing || !_workOrder.IsFullyIssued)">
                         Complete
                     </MudButton>
                 }
@@ -237,8 +261,10 @@ else
     public Guid Id { get; set; }
 
     private WorkOrderDto? _workOrder;
-    private bool _isLoading = false;
-    private bool _isProcessing = false;
+    private bool _isLoading;
+    private bool _isProcessing;
+    private readonly Dictionary<Guid, int> _issueQuantities = new();
+    private Guid _issueOperationId = Guid.NewGuid();
 
     protected override async Task OnInitializedAsync()
     {
@@ -257,6 +283,19 @@ else
         try
         {
             _workOrder = await WorkOrderService.GetWorkOrderByIdAsync(Id);
+            if (_workOrder != null)
+            {
+                var validProductIds = _workOrder.Items.Select(item => item.ProductId).ToHashSet();
+                foreach (var staleKey in _issueQuantities.Keys.Where(key => !validProductIds.Contains(key)).ToList())
+                {
+                    _issueQuantities.Remove(staleKey);
+                }
+
+                foreach (var item in _workOrder.Items)
+                {
+                    _issueQuantities.TryAdd(item.ProductId, 0);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -408,6 +447,63 @@ else
         catch (Exception ex)
         {
             Snackbar.Add($"Error starting work order: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+
+    private async Task IssueSelectedItemsAsync()
+    {
+        if (_workOrder == null)
+        {
+            return;
+        }
+
+        var items = _workOrder.Items
+            .Where(item => _issueQuantities.GetValueOrDefault(item.ProductId) > 0)
+            .Select(item => new IssueItemRequest
+            {
+                ProductId = item.ProductId,
+                Quantity = _issueQuantities[item.ProductId]
+            })
+            .ToList();
+
+        if (items.Count == 0)
+        {
+            Snackbar.Add("Enter at least one quantity to issue.", Severity.Warning);
+            return;
+        }
+
+        _isProcessing = true;
+        try
+        {
+            var result = await WorkOrderService.IssueItemsAsync(
+                Id,
+                new IssueWorkOrderItemsRequest
+                {
+                    OperationId = _issueOperationId,
+                    Items = items
+                });
+
+            if (result != null)
+            {
+                Snackbar.Add("Selected quantities were posted to the stock ledger.", Severity.Success);
+                _issueOperationId = Guid.NewGuid();
+                foreach (var key in _issueQuantities.Keys.ToList())
+                {
+                    _issueQuantities[key] = 0;
+                }
+                await LoadWorkOrderAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Preserve the operation id so a retry after an uncertain network
+            // outcome is safe and returns the original posting.
+            Snackbar.Add($"Error issuing items: {ex.Message}", Severity.Error);
         }
         finally
         {

@@ -1,7 +1,9 @@
 namespace InventoryAPI.Domain.Enums;
 
 /// <summary>
-/// Types of stock movements
+/// Persisted stock movement types. Numeric values are stable because they are
+/// stored in PostgreSQL. Transfer remains reserved for historical compatibility
+/// but is rejected until the multi-location RFC is implemented.
 /// </summary>
 public enum StockMovementType
 {
@@ -9,5 +11,6 @@ public enum StockMovementType
     Issue = 2,
     Adjustment = 3,
     Transfer = 4,
-    Return = 5
+    Return = 5,
+    OpeningBalance = 6
 }

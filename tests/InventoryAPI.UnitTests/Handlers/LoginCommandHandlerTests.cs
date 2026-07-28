@@ -12,25 +12,26 @@ public class LoginCommandHandlerTests
 {
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<IRepository<User>> _users = new();
-    private readonly Mock<IPasswordService> _passwordService = new();
-    private readonly Mock<ITokenService> _tokenService = new();
+    private readonly Mock<IPasswordService> _passwords = new();
+    private readonly Mock<ITokenService> _tokens = new();
+    private readonly Mock<IRefreshTokenHasher> _refreshHashes = new();
     private readonly LoginCommandHandler _handler;
 
     public LoginCommandHandlerTests()
     {
-        _unitOfWork.SetupGet(u => u.Users).Returns(_users.Object);
-        _tokenService.Setup(t => t.GenerateAccessToken(It.IsAny<User>())).Returns("access-token");
-        _tokenService.Setup(t => t.GenerateRefreshToken()).Returns("refresh-token");
-        _tokenService.Setup(t => t.GetRefreshTokenExpiryTime()).Returns(DateTime.UtcNow.AddDays(7));
-        _tokenService.SetupGet(t => t.AccessTokenLifetimeMinutes).Returns(60);
-
-        _handler = new LoginCommandHandler(_unitOfWork.Object, _passwordService.Object, _tokenService.Object);
+        _unitOfWork.SetupGet(unit => unit.Users).Returns(_users.Object);
+        _tokens.Setup(service => service.GenerateAccessToken(It.IsAny<User>())).Returns("access-token");
+        _tokens.Setup(service => service.GenerateRefreshToken()).Returns("refresh-token");
+        _tokens.Setup(service => service.GetRefreshTokenExpiryTime()).Returns(DateTime.UtcNow.AddDays(7));
+        _tokens.SetupGet(service => service.AccessTokenLifetimeMinutes).Returns(60);
+        _refreshHashes.Setup(service => service.Hash("refresh-token")).Returns("REFRESH-HASH");
+        _handler = new LoginCommandHandler(
+            _unitOfWork.Object, _passwords.Object, _tokens.Object, _refreshHashes.Object);
     }
 
-    private void SetupUser(User? user) =>
-        _users.Setup(r => r.FirstOrDefaultAsync(
-                It.IsAny<Expression<Func<User, bool>>>(),
-                It.IsAny<CancellationToken>()))
+    private void UserResult(User? user) =>
+        _users.Setup(repository => repository.FirstOrDefaultAsync(
+                It.IsAny<Expression<Func<User, bool>>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
     private static User ActiveUser() => new()
@@ -42,58 +43,83 @@ public class LoginCommandHandlerTests
     };
 
     [Fact]
-    public async Task Handle_ValidCredentials_ReturnsTokensAndStoresRefreshToken()
+    public async Task Handle_ValidCredentials_ReturnsRawTokenAndStoresOnlyHash()
     {
         var user = ActiveUser();
-        SetupUser(user);
-        _passwordService.Setup(p => p.VerifyPassword("Password1", "hash")).Returns(true);
+        UserResult(user);
+        _passwords.Setup(service => service.VerifyPassword("Password1", "hash")).Returns(true);
+        _passwords.Setup(service => service.NeedsRehash("hash")).Returns(false);
 
         var result = await _handler.Handle(
-            new LoginCommand { Email = "user@example.com", Password = "Password1" }, default);
+            new LoginCommand { Email = " USER@EXAMPLE.COM ", Password = "Password1" },
+            TestContext.Current.CancellationToken);
 
         result.AccessToken.Should().Be("access-token");
         result.RefreshToken.Should().Be("refresh-token");
         result.ExpiresIn.Should().Be(3600);
-        user.RefreshToken.Should().Be("refresh-token");
-        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        user.RefreshTokenHash.Should().Be("REFRESH-HASH");
+        user.RefreshTokenHash.Should().NotBe(result.RefreshToken);
+        _unitOfWork.Verify(unit => unit.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Handle_UnknownEmail_ThrowsSameErrorAsWrongPassword()
+    public async Task Handle_LegacyPasswordHash_UpgradesAfterVerification()
     {
-        SetupUser(null);
+        var user = ActiveUser();
+        UserResult(user);
+        _passwords.Setup(service => service.VerifyPassword("Password1", "hash")).Returns(true);
+        _passwords.Setup(service => service.NeedsRehash("hash")).Returns(true);
+        _passwords.Setup(service => service.HashPassword("Password1")).Returns("versioned-hash");
 
+        await _handler.Handle(
+            new LoginCommand { Email = user.Email, Password = "Password1" },
+            TestContext.Current.CancellationToken);
+
+        user.PasswordHash.Should().Be("versioned-hash");
+    }
+
+    [Fact]
+    public async Task Handle_UnknownEmail_UsesGenericCredentialError()
+    {
+        UserResult(null);
         var act = () => _handler.Handle(
-            new LoginCommand { Email = "nobody@example.com", Password = "Password1" }, default);
-
-        (await act.Should().ThrowAsync<ValidationException>())
-            .Which.Errors.Values.SelectMany(v => v)
+            new LoginCommand { Email = "nobody@example.com", Password = "Password1" },
+            TestContext.Current.CancellationToken);
+        var exception = await act.Should().ThrowAsync<ValidationException>();
+        exception.Which.Errors.Values.SelectMany(values => values)
             .Should().Contain("Invalid email or password");
+        _passwords.Verify(service => service.VerifyPassword(
+            "Password1",
+            It.Is<string>(hash => hash.StartsWith("$pbkdf2-sha256$600000$", StringComparison.Ordinal))),
+            Times.Once);
     }
 
     [Fact]
-    public async Task Handle_WrongPassword_Throws()
+    public async Task Handle_WrongPassword_UsesGenericCredentialError()
     {
-        SetupUser(ActiveUser());
-        _passwordService.Setup(p => p.VerifyPassword(It.IsAny<string>(), It.IsAny<string>())).Returns(false);
-
+        UserResult(ActiveUser());
+        _passwords.Setup(service => service.VerifyPassword(It.IsAny<string>(), It.IsAny<string>()))
+            .Returns(false);
         var act = () => _handler.Handle(
-            new LoginCommand { Email = "user@example.com", Password = "wrong" }, default);
-
+            new LoginCommand { Email = "user@example.com", Password = "wrong" },
+            TestContext.Current.CancellationToken);
         await act.Should().ThrowAsync<ValidationException>();
     }
 
     [Fact]
-    public async Task Handle_InactiveUser_Throws()
+    public async Task Handle_InactiveUser_DoesNotIssueTokens()
     {
         var user = ActiveUser();
         user.IsActive = false;
-        SetupUser(user);
-        _passwordService.Setup(p => p.VerifyPassword(It.IsAny<string>(), It.IsAny<string>())).Returns(true);
-
+        UserResult(user);
         var act = () => _handler.Handle(
-            new LoginCommand { Email = "user@example.com", Password = "Password1" }, default);
-
+            new LoginCommand { Email = user.Email, Password = "Password1" },
+            TestContext.Current.CancellationToken);
         await act.Should().ThrowAsync<ValidationException>();
+        _passwords.Verify(service => service.VerifyPassword(
+            "Password1",
+            It.Is<string>(hash => hash.StartsWith("$pbkdf2-sha256$600000$", StringComparison.Ordinal))),
+            Times.Once);
+        _tokens.Verify(service => service.GenerateAccessToken(It.IsAny<User>()), Times.Never);
     }
 }

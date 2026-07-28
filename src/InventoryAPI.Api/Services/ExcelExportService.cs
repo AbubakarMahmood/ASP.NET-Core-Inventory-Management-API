@@ -1,34 +1,26 @@
+using ClosedXML.Excel;
 using InventoryAPI.Application.Interfaces;
-using OfficeOpenXml;
-using OfficeOpenXml.Style;
-using System.Drawing;
 using System.Reflection;
 
 namespace InventoryAPI.Api.Services;
 
 /// <summary>
-/// Service for exporting data to Excel format using EPPlus
+/// Service for exporting data to Excel format using ClosedXML
 /// </summary>
 public class ExcelExportService : IExcelExportService
 {
-    public ExcelExportService()
-    {
-        // Set EPPlus license context (NonCommercial or Commercial)
-        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-    }
-
     /// <summary>
     /// Export data to Excel format
     /// </summary>
     public byte[] ExportToExcel<T>(IEnumerable<T> data, string sheetName = "Sheet1") where T : class
     {
-        using var package = new ExcelPackage();
-        var worksheet = package.Workbook.Worksheets.Add(sheetName);
+        using var workbook = new XLWorkbook();
+        var worksheet = workbook.Worksheets.Add(sheetName);
 
         var dataList = data.ToList();
         if (!dataList.Any())
         {
-            return package.GetAsByteArray();
+            return Save(workbook);
         }
 
         // Get properties to export (exclude complex types)
@@ -39,12 +31,11 @@ public class ExcelExportService : IExcelExportService
         // Add headers
         for (int i = 0; i < properties.Count; i++)
         {
-            var cell = worksheet.Cells[1, i + 1];
+            var cell = worksheet.Cell(1, i + 1);
             cell.Value = SplitCamelCase(properties[i].Name);
             cell.Style.Font.Bold = true;
-            cell.Style.Fill.PatternType = ExcelFillStyle.Solid;
-            cell.Style.Fill.BackgroundColor.SetColor(Color.LightGray);
-            cell.Style.Border.BorderAround(ExcelBorderStyle.Thin);
+            cell.Style.Fill.BackgroundColor = XLColor.LightGray;
+            cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
         }
 
         // Add data rows
@@ -53,24 +44,34 @@ public class ExcelExportService : IExcelExportService
             var item = dataList[row];
             for (int col = 0; col < properties.Count; col++)
             {
-                var cell = worksheet.Cells[row + 2, col + 1];
+                var cell = worksheet.Cell(row + 2, col + 1);
                 var value = properties[col].GetValue(item);
 
                 // Format values based on type
                 if (value is DateTime dateTime)
                 {
                     cell.Value = dateTime;
-                    cell.Style.Numberformat.Format = "yyyy-mm-dd hh:mm:ss";
+                    cell.Style.DateFormat.Format = "yyyy-mm-dd hh:mm:ss";
                 }
                 else if (value is DateOnly dateOnly)
                 {
                     cell.Value = dateOnly.ToDateTime(TimeOnly.MinValue);
-                    cell.Style.Numberformat.Format = "yyyy-mm-dd";
+                    cell.Style.DateFormat.Format = "yyyy-mm-dd";
                 }
-                else if (value is decimal || value is double || value is float)
+                else if (value is decimal decimalValue)
                 {
-                    cell.Value = value;
-                    cell.Style.Numberformat.Format = "#,##0.00";
+                    cell.Value = decimalValue;
+                    cell.Style.NumberFormat.Format = "#,##0.00";
+                }
+                else if (value is double doubleValue)
+                {
+                    cell.Value = doubleValue;
+                    cell.Style.NumberFormat.Format = "#,##0.00";
+                }
+                else if (value is float floatValue)
+                {
+                    cell.Value = floatValue;
+                    cell.Style.NumberFormat.Format = "#,##0.00";
                 }
                 else if (value is bool boolValue)
                 {
@@ -85,17 +86,16 @@ public class ExcelExportService : IExcelExportService
                     cell.Value = value?.ToString() ?? string.Empty;
                 }
 
-                cell.Style.Border.BorderAround(ExcelBorderStyle.Thin);
+                cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
             }
         }
 
         // Auto-fit columns
-        worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
+        worksheet.Columns().AdjustToContents();
 
-        // Freeze header row
-        worksheet.View.FreezePanes(2, 1);
+        worksheet.SheetView.FreezeRows(1);
 
-        return package.GetAsByteArray();
+        return Save(workbook);
     }
 
     /// <summary>
@@ -121,5 +121,12 @@ public class ExcelExportService : IExcelExportService
     private static string SplitCamelCase(string input)
     {
         return System.Text.RegularExpressions.Regex.Replace(input, "([A-Z])", " $1").Trim();
+    }
+
+    private static byte[] Save(XLWorkbook workbook)
+    {
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
     }
 }

@@ -3,9 +3,6 @@ using InventoryAPI.Application.Commands.Products;
 
 namespace InventoryAPI.Application.Validators;
 
-/// <summary>
-/// Validator for CreateProductCommand
-/// </summary>
 public class CreateProductCommandValidator : AbstractValidator<CreateProductCommand>
 {
     public CreateProductCommandValidator()
@@ -18,12 +15,15 @@ public class CreateProductCommandValidator : AbstractValidator<CreateProductComm
             .NotEmpty().WithMessage("Name is required")
             .MaximumLength(200).WithMessage("Name cannot exceed 200 characters");
 
+        RuleFor(x => x.Description)
+            .MaximumLength(1000).WithMessage("Description cannot exceed 1000 characters");
+
         RuleFor(x => x.Category)
             .NotEmpty().WithMessage("Category is required")
             .MaximumLength(100).WithMessage("Category cannot exceed 100 characters");
 
-        RuleFor(x => x.CurrentStock)
-            .GreaterThanOrEqualTo(0).WithMessage("Current stock cannot be negative");
+        RuleFor(x => x.OpeningStock)
+            .GreaterThanOrEqualTo(0).WithMessage("Opening stock cannot be negative");
 
         RuleFor(x => x.ReorderPoint)
             .GreaterThanOrEqualTo(0).WithMessage("Reorder point cannot be negative");
@@ -36,7 +36,7 @@ public class CreateProductCommandValidator : AbstractValidator<CreateProductComm
             .MaximumLength(20).WithMessage("Unit of measure cannot exceed 20 characters");
 
         RuleFor(x => x.UnitCost)
-            .GreaterThan(0).WithMessage("Unit cost must be greater than zero");
+            .GreaterThanOrEqualTo(0).WithMessage("Unit cost cannot be negative");
 
         RuleFor(x => x.Location)
             .NotEmpty().WithMessage("Location is required")

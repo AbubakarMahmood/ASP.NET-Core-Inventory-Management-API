@@ -101,9 +101,6 @@ namespace InventoryAPI.Infrastructure.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<int>("CostingMethod")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -181,7 +178,21 @@ namespace InventoryAPI.Infrastructure.Data.Migrations
 
                     b.HasIndex("Category", "CurrentStock");
 
-                    b.ToTable("Products", (string)null);
+                    b.ToTable("Products", (string)null, table =>
+                        {
+                            table.HasCheckConstraint(
+                                "CK_Products_CurrentStock_NonNegative",
+                                "\"CurrentStock\" >= 0");
+                            table.HasCheckConstraint(
+                                "CK_Products_ReorderPoint_NonNegative",
+                                "\"ReorderPoint\" >= 0");
+                            table.HasCheckConstraint(
+                                "CK_Products_ReorderQuantity_Positive",
+                                "\"ReorderQuantity\" > 0");
+                            table.HasCheckConstraint(
+                                "CK_Products_UnitCost_NonNegative",
+                                "\"UnitCost\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("InventoryAPI.Domain.Entities.StockMovement", b =>
@@ -190,10 +201,19 @@ namespace InventoryAPI.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("BalanceAfter")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BalanceBefore")
+                        .HasColumnType("integer");
+
                     b.Property<string>("DestinationLocation")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("PerformedById")
                         .HasColumnType("uuid");
@@ -243,13 +263,32 @@ namespace InventoryAPI.Infrastructure.Data.Migrations
 
                     b.HasIndex("ProductId");
 
+                    b.HasIndex("ProductId", "Timestamp");
+
+                    b.HasIndex("OperationId", "ProductId")
+                        .IsUnique();
+
                     b.HasIndex("Timestamp");
 
                     b.HasIndex("Type");
 
                     b.HasIndex("WorkOrderId");
 
-                    b.ToTable("StockMovements", (string)null);
+                    b.ToTable("StockMovements", (string)null, table =>
+                        {
+                            table.HasCheckConstraint(
+                                "CK_StockMovements_Balance_Delta",
+                                "((\"Type\" IN (1, 5, 6) AND \"Quantity\" > 0 AND \"BalanceAfter\" = \"BalanceBefore\" + \"Quantity\") OR (\"Type\" = 2 AND \"Quantity\" > 0 AND \"BalanceAfter\" = \"BalanceBefore\" - \"Quantity\") OR (\"Type\" = 3 AND \"BalanceAfter\" = \"BalanceBefore\" + \"Quantity\") OR (\"Type\" = 4 AND \"BalanceAfter\" = \"BalanceBefore\"))");
+                            table.HasCheckConstraint(
+                                "CK_StockMovements_Balances_NonNegative",
+                                "\"BalanceBefore\" >= 0 AND \"BalanceAfter\" >= 0");
+                            table.HasCheckConstraint(
+                                "CK_StockMovements_Quantity_NonZero",
+                                "\"Quantity\" <> 0");
+                            table.HasCheckConstraint(
+                                "CK_StockMovements_Type_Range",
+                                "\"Type\" BETWEEN 1 AND 6");
+                        });
                 });
 
             modelBuilder.Entity("InventoryAPI.Domain.Entities.User", b =>
@@ -303,8 +342,9 @@ namespace InventoryAPI.Infrastructure.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<string>("RefreshToken")
-                        .HasColumnType("text");
+                    b.Property<string>("RefreshTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<DateTime?>("RefreshTokenExpiryTime")
                         .HasColumnType("timestamp with time zone");
@@ -324,6 +364,10 @@ namespace InventoryAPI.Infrastructure.Data.Migrations
                         .IsUnique();
 
                     b.HasIndex("IsActive");
+
+                    b.HasIndex("RefreshTokenHash")
+                        .IsUnique()
+                        .HasFilter("\"RefreshTokenHash\" IS NOT NULL");
 
                     b.ToTable("Users", (string)null);
                 });
@@ -449,9 +493,18 @@ namespace InventoryAPI.Infrastructure.Data.Migrations
 
                     b.HasIndex("ProductId");
 
-                    b.HasIndex("WorkOrderId");
+                    b.HasIndex("WorkOrderId", "ProductId")
+                        .IsUnique();
 
-                    b.ToTable("WorkOrderItems", (string)null);
+                    b.ToTable("WorkOrderItems", (string)null, table =>
+                        {
+                            table.HasCheckConstraint(
+                                "CK_WorkOrderItems_QuantityIssued_Range",
+                                "\"QuantityIssued\" >= 0 AND \"QuantityIssued\" <= \"QuantityRequested\"");
+                            table.HasCheckConstraint(
+                                "CK_WorkOrderItems_QuantityRequested_Positive",
+                                "\"QuantityRequested\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("InventoryAPI.Domain.Entities.FilterPreset", b =>

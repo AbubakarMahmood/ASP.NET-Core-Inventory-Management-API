@@ -6,7 +6,7 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     ignore:
-      - dependency-name: Microsoft.*
+      - dependency-name: "*"
         update-types:
           - version-update:semver-major
     groups:
@@ -14,8 +14,9 @@ updates:
         patterns:
           - Microsoft.*
           - Asp.Versioning.*
-      test-tooling:
-        dependency-type: development
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: github-actions
     directory: /

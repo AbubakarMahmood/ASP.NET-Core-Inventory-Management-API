@@ -1,0 +1,23 @@
+name: RFC proposal
+description: Propose a significant semantic, schema, security, or architecture change.
+title: "rfc: "
+labels: [rfc]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and motivation
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed design
+    validations:
+      required: true
+  - type: textarea
+    id: migration
+    attributes:
+      label: Migration, compatibility, security, and operations
+    validations:
+      required: true

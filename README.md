@@ -1,137 +1,161 @@
-# Inventory Management API
+# StockVerity *(working codename)*
 
-REST API for inventory and work order management, built with ASP.NET Core 8, PostgreSQL, and a Blazor WebAssembly front end.
+> **Provisional product identity:** an auditable single-location stock ledger
+> tied to work-order fulfilment.
 
-It covers the workflows a small warehouse or maintenance department actually needs: product catalog with reorder points, stock movements with a full audit trail, and work orders that move through a draft → submit → approve → execute lifecycle with stock issued against them.
+Under the working codename StockVerity, this repository is a portfolio-scale
+ASP.NET Core and Blazor system for a maintenance storeroom. Its central invariant is deliberately narrower than “inventory
+management”: **every successful quantity change has an attributable,
+append-only movement, and work-order completion requires every requested unit to
+be issued.**
 
-## Stack
+This source snapshot is **not labelled production-ready**. On 2026-07-28, the
+pinned SDK produced a zero-warning Release build, 101 unit tests and 25
+PostgreSQL integration tests passed, both applications published, both
+container images built, and the Compose smoke passed its request-size,
+readiness outage/recovery, idempotency, and backup/restore scenarios. A green
+GitHub Actions run remains commit-specific evidence rather than something this
+README can guarantee. See
+[`docs/CLAIMS-AND-EVIDENCE.md`](docs/CLAIMS-AND-EVIDENCE.md).
 
-| Layer | Technology |
-|---|---|
-| API | ASP.NET Core 8, MediatR (CQRS), FluentValidation, Serilog |
-| Data | PostgreSQL, EF Core 8 (Npgsql), migrations, `xmin` optimistic concurrency |
-| Auth | JWT bearer tokens with rotating refresh tokens, role-based authorization |
-| Realtime | SignalR hub for work order and low-stock notifications |
-| UI | Blazor WebAssembly + MudBlazor |
-| Tests | xUnit, Moq, FluentAssertions — unit + full-pipeline integration tests |
-| Ops | Docker Compose, health checks, Excel/PDF export (EPPlus, QuestPDF) |
+## What is implemented
+
+- Product catalogue with SKU uniqueness, reorder metadata, one recorded
+  location, PostgreSQL `xmin` optimistic concurrency, and soft deletion.
+- Explicit `openingStock` creation semantics: a non-zero opening balance creates
+  an immutable ledger posting in the same commit as the product.
+- Receipt, return, issue, and signed adjustment postings with actor, reason,
+  reference, before/after balances, historical unit cost, and retry-safe
+  operation IDs.
+- Work orders with draft, submission, approval/rejection, start, issue,
+  completion, and cancellation rules.
+- Atomic multi-line fulfilment: the entire issue batch is validated before any
+  requested quantity or stock balance changes.
+- JWT role authorization, versioned PBKDF2 password hashes, one-way refresh-token
+  storage, token rotation, and rate-limited login/refresh endpoints.
+- PostgreSQL migrations, database-backed readiness, explicit startup migration
+  and demo switches, Blazor WebAssembly UI, exports, Docker Compose, and CI.
+
+## Intentional boundaries
+
+- One product has one aggregate on-hand balance and one descriptive location.
+- **New transfers are rejected.** A true transfer requires per-location balances
+  and is proposed in [`RFC-0001`](docs/rfc/0001-multi-location-balances-and-reservations.md).
+- The activity screen is a derived timeline, not a tamper-evident compliance
+  journal.
+- Browser bearer tokens currently use local storage; a BFF/cookie redesign is a
+  draft proposal, not an implemented control.
+- XLSX export uses MIT-licensed ClosedXML. PDF export uses QuestPDF Community;
+  its current eligibility terms must be reviewed before a deployment whose
+  ownership or revenue no longer qualifies.
+- No lot, serial, expiry, reservation, costing-layer, tenant, ERP, WMS, HA, SLO,
+  or regulatory-compliance claim is made.
 
 ## Architecture
 
-Clean Architecture with the dependency rule pointing inward:
-
+```text
+Browser / API client
+        |
+        v
+ASP.NET Core API  <---->  Blazor WebAssembly + nginx
+        |
+        v
+Application commands, queries, validation, and policies
+        |
+        v
+Domain entities and invariants
+        |
+        v
+EF Core / Npgsql / PostgreSQL
 ```
-API (controllers, middleware, SignalR, Swagger)
- └─> Application (commands/queries, handlers, validators, DTOs)
-      └─> Domain (entities, business rules, domain exceptions)
- └─> Infrastructure (EF Core, repositories, JWT/password services)
-      └─> Application interfaces
-```
 
-Key decisions:
+The code remains a modular monolith. C4 context, container, component, and
+deployment views live in [`docs/architecture`](docs/architecture/README.md).
+Accepted trade-offs are recorded in [`docs/adr`](docs/adr/README.md); proposed
+semantic changes are in [`docs/rfc`](docs/rfc/README.md).
 
-- **CQRS via MediatR** — every endpoint dispatches a command or query; controllers hold no logic.
-- **Business rules live in the domain.** Work order state transitions (`Submit`, `Approve`, `Reject`, `Start`, `Complete`, `Cancel`) and stock arithmetic (`AdjustStock` throws on insufficient stock) are entity methods with unit tests, not service-layer `if`s.
-- **Validation pipeline** — a MediatR behavior runs FluentValidation on every request before it reaches a handler; failures come back as structured 400s.
-- **Soft deletes + audit columns** — a global query filter hides deleted rows; `SaveChangesAsync` stamps created/modified/deleted metadata automatically.
-- **Optimistic concurrency on PostgreSQL `xmin`** — no fake rowversion columns; the database's own transaction id detects conflicting writes, surfaced as 409s.
-- **Repository + Unit of Work** over EF Core, with an execution-strategy-aware transaction helper (compatible with `EnableRetryOnFailure`).
+## Local Compose demo
 
-## Running it
-
-Requires Docker.
+Copy the environment template and replace both secrets:
 
 ```bash
+cp .env.example .env
+# edit POSTGRES_PASSWORD and JWT_SECRET
 docker compose up --build
 ```
 
-| Service | URL |
+| Surface | Default URL |
 |---|---|
-| API + Swagger | http://localhost:5000/swagger |
-| Blazor UI | http://localhost:3000 |
-| Health check | http://localhost:5000/api/v1/health |
+| Blazor UI | `http://localhost:3000` |
+| API | `http://localhost:5000` |
+| OpenAPI, when enabled | `http://localhost:5000/swagger` |
+| Readiness | `http://localhost:5000/health/ready` |
 
-On first start the API applies migrations and seeds demo data.
-
-Demo accounts (`docker compose` development mode only):
+The checked-in `.env.example` enables migrations, demo data, and OpenAPI for the
+local demo only. Demo identities are:
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | admin@inventory.com | Admin123! |
-| Manager | manager@inventory.com | Manager123! |
-| Operator | operator@inventory.com | Operator123! |
+| Admin | `admin@stockverity.local` | `Admin123!` |
+| Manager | `manager@stockverity.local` | `Manager123!` |
+| Operator | `operator@stockverity.local` | `Operator123!` |
 
-### Running locally without Docker
+Never enable those identities in a real environment.
 
-You need .NET 8 SDK and a PostgreSQL instance. Point `ConnectionStrings__DefaultConnection` at your database, set `JwtSettings__SecretKey` (32+ chars), then:
+## Verification
 
-```bash
-dotnet run --project src/InventoryAPI.Api
-```
-
-## API overview
-
-All endpoints are versioned under `/api/v1` and documented in Swagger. Authenticate via `POST /api/v1/auth/login`, then send the access token as a `Bearer` header.
-
-| Area | Endpoints |
-|---|---|
-| Auth | `login`, `refresh` (rotating refresh tokens), `logout` |
-| Products | CRUD, pagination, search, category/price/stock filters, multi-column sort, low-stock filter, Excel/PDF export |
-| Stock movements | record Receipt/Issue/Adjustment/Transfer/Return, per-product history, aggregate statistics |
-| Work orders | full lifecycle (`submit`, `approve`, `reject`, `start`, `complete`, `cancel`), item issuing with stock decrement, export |
-| Users | admin-only CRUD, password change, role assignment |
-| Audit | derived audit log across entities, export |
-| Filter presets | saved per-user filters, sharing, defaults |
-
-Role model: **Operator** works with stock and work orders, **Manager** additionally manages products and approvals, **Admin** additionally manages users and database status.
-
-## Testing
+The repository pins SDK `8.0.423`. Unit tests can run independently; HTTP
+integration tests deliberately require PostgreSQL because the system relies on
+migrations, constraints, triggers, and `xmin`. The supplied test identity must
+have permission to create and drop isolated databases.
 
 ```bash
-dotnet test
+dotnet restore InventoryAPI.sln
+dotnet build InventoryAPI.sln -c Release --no-restore
+dotnet test tests/InventoryAPI.UnitTests -c Release --no-build
+
+export STOCKVERITY_TEST_POSTGRES='Host=127.0.0.1;Port=5432;Database=postgres;Username=postgres;Password=postgres'
+dotnet test tests/InventoryAPI.IntegrationTests -c Release --no-build
+
+./scripts/smoke-compose.sh
 ```
 
-- **Unit tests** cover the domain rules (work order transitions, stock arithmetic), token/password services, auth handlers, and validators.
-- **Integration tests** boot the real HTTP pipeline via `WebApplicationFactory` and exercise login/refresh/logout, role enforcement, the complete work order lifecycle, and stock movement bookkeeping end to end.
+`./scripts/verify.sh` runs restore, build, both test projects, and API/UI publish;
+it expects `STOCKVERITY_TEST_POSTGRES` to be set.
 
-## Migrations
+The latest recorded local baseline is 101 passing unit tests and 25 passing
+PostgreSQL integration tests. `./scripts/smoke-compose.sh` additionally builds
+the images and verifies a `413` oversized-body response, UI/API startup,
+authentication, opening stock, retry-safe posting, conflict handling,
+database-backed readiness failure/recovery, and backup/restore recovery.
 
-Schema changes are managed with EF Core migrations:
+## Documentation baseline
 
-```bash
-dotnet ef migrations add <Name> \
-  --project src/InventoryAPI.Infrastructure \
-  --startup-project src/InventoryAPI.Api
-```
+- [Software requirements specification](docs/SRS.md)
+- [Requirements traceability](docs/TRACEABILITY.md)
+- [Data/API contracts](docs/DATA-CONTRACTS.md)
+- [Security model](docs/SECURITY.md)
+- [Operations runbook](docs/OPERATIONS.md)
+- [Testing and evidence policy](docs/TESTING.md)
+- [Definition of done](docs/DEFINITION-OF-DONE.md)
+- [Product naming decision](docs/PRODUCT-NAMING.md)
 
-In development the API applies pending migrations at startup. In production it refuses to start until migrations have been applied (`dotnet ef database update`), so a deploy can never run against a half-migrated schema.
+The SRS is informed by ISO/IEC/IEEE 29148:2018 structure; this repository does
+not claim certification or audited standards conformance. ADRs and RFCs are
+used because they fit this repository’s governance scale. KEP machinery is not
+used because there is no multi-team Kubernetes-style enhancement process to
+coordinate.
 
-## Configuration
+## Repository name
 
-| Setting | Purpose |
-|---|---|
-| `ConnectionStrings:DefaultConnection` | PostgreSQL connection string |
-| `JwtSettings:SecretKey` | HMAC signing key, minimum 32 characters — **required** |
-| `JwtSettings:ExpiryMinutes` / `RefreshTokenExpiryDays` | Token lifetimes |
-| `Cors:AllowedOrigins` | Array of allowed browser origins |
-| `DataProtection:KeysPath` | Where data-protection keys persist (mounted volume in Docker) |
-
-All settings can be supplied as environment variables (`Section__Key` form), as `docker-compose.yml` does.
-
-## Project layout
-
-```
-src/
-  InventoryAPI.Domain/          Entities, enums, domain exceptions
-  InventoryAPI.Application/     Commands, queries, validators, DTOs, interfaces
-  InventoryAPI.Infrastructure/  DbContext, migrations, repositories, auth services
-  InventoryAPI.Api/             Controllers, middleware, SignalR hub, exports
-  InventoryAPI.BlazorUI/        Blazor WASM front end (MudBlazor)
-tests/
-  InventoryAPI.UnitTests/
-  InventoryAPI.IntegrationTests/
-```
+`ASP.NET-Core-Inventory-Management-API` is an accurate historical label but a
+weak portfolio identity. A collision check found material adjacent-market confusion risk around the
+word “Verity”, so **StockVerity remains a working codename, not the recommended
+public repository name**. Until the owner completes legal and market clearance, the
+safer descriptive slug is **`auditable-inventory-ledger`**. Internal
+`InventoryAPI.*` namespaces remain unchanged in this pass to avoid low-value
+migration churn.
 
 ## License
 
-MIT
+[MIT](LICENSE)
